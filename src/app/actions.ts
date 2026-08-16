@@ -10,9 +10,11 @@ const signupSchema = z.object({
   email: z.email("Please enter a valid email address").max(254),
 });
 
+// The win/no-match outcome is deliberately never returned to the browser —
+// results go out by email only, so an unreachable address can't claim a win.
 export type JoinResult =
-  | { status: "success"; ticket: number; won: boolean }
-  | { status: "duplicate"; ticket: number | null; won: boolean }
+  | { status: "success"; ticket: number; emailed: boolean }
+  | { status: "duplicate"; ticket: number | null }
   | { status: "error"; message: string };
 
 export async function joinWaitlist(
@@ -57,18 +59,14 @@ export async function joinWaitlist(
 
   if (error) {
     // 23505 = unique_violation: the email is already on the list. Their
-    // original ticket is the one that counts — show it back to them.
+    // result was emailed when they first joined — don't resend or reveal it.
     if (error.code === "23505") {
       const { data } = await supabaseAdmin()
         .from("signups")
-        .select("ticket_number, is_winner")
+        .select("ticket_number")
         .eq("email", email.toLowerCase())
         .maybeSingle();
-      return {
-        status: "duplicate",
-        ticket: data?.ticket_number ?? null,
-        won: data?.is_winner ?? false,
-      };
+      return { status: "duplicate", ticket: data?.ticket_number ?? null };
     }
     console.error("joinWaitlist insert failed:", error);
     return {
@@ -77,45 +75,67 @@ export async function joinWaitlist(
     };
   }
 
-  if (won) {
-    await notifyWinner(name, email.toLowerCase(), ticket.number, ticket.week);
-  }
+  const emailed = await sendResultEmail(
+    name,
+    email.toLowerCase(),
+    ticket.number,
+    ticket.week,
+    won
+  );
 
-  return { status: "success", ticket: ticket.number, won };
+  return { status: "success", ticket: ticket.number, emailed };
 }
 
-// Best-effort: a win is recorded in the database regardless, so email trouble
-// never turns a winning signup into an error.
-async function notifyWinner(
+// The result email is the only reveal channel. Returns whether the send was
+// accepted, so the UI can warn when an address is unreachable — the win (if
+// any) is already recorded, and the owner heads-up below covers follow-up.
+async function sendResultEmail(
   name: string,
   email: string,
   ticket: number,
-  week: string
-) {
+  week: string,
+  won: boolean
+): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  if (!apiKey) {
+    console.error("sendResultEmail: RESEND_API_KEY is not configured");
+    return false;
+  }
 
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
   const ticketLabel = String(ticket).padStart(3, "0");
   const resend = new Resend(apiKey);
 
-  const results = await Promise.allSettled([
-    resend.emails.send({
-      from,
-      to: email,
-      subject: "Your startingline ticket won — $100 off at opening",
-      html: `
-        <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-          <h1 style="font-size: 20px;">You won, ${name}!</h1>
-          <p>Ticket <strong>№ ${ticketLabel}</strong> matched this week's number (${week}).</p>
-          <p>That's <strong>$100 off</strong> when the startingline store opens. Keep this email — it's your claim.</p>
-          <p style="color: #6b7280; font-size: 13px;">We'll send redemption details with the opening announcement.</p>
-        </div>
-      `,
-    }),
-    // Heads-up to the store owner so winners never go unnoticed — this also
-    // covers Resend's free tier, which only delivers to the account owner.
-    process.env.TEST_EMAIL_TO
+  const result = won
+    ? {
+        subject: "Your startingline ticket won — $100 off at opening",
+        html: `
+          <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h1 style="font-size: 20px;">You won, ${name}!</h1>
+            <p>Ticket <strong>№ ${ticketLabel}</strong> matched this week's number (${week}).</p>
+            <p>That's <strong>$100 off</strong> when the startingline store opens. Keep this email — it's your claim.</p>
+            <p style="color: #6b7280; font-size: 13px;">We'll send redemption details with the opening announcement.</p>
+          </div>
+        `,
+      }
+    : {
+        subject: `Ticket № ${ticketLabel} — this week's result`,
+        html: `
+          <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h1 style="font-size: 20px;">You're on the list, ${name}</h1>
+            <p>Ticket <strong>№ ${ticketLabel}</strong> didn't match this week's number (${week}) — no win this time.</p>
+            <p>You're on the startingline waitlist and we'll email you the moment we open.</p>
+            <p style="color: #6b7280; font-size: 13px;">One ticket per email · a new number is drawn every Monday.</p>
+          </div>
+        `,
+      };
+
+  const sends = await Promise.allSettled([
+    resend.emails.send({ from, to: email, ...result }),
+    // Heads-up to the store owner on wins so winners never go unnoticed —
+    // this also covers Resend's free tier, which only delivers to the
+    // account owner.
+    won && process.env.TEST_EMAIL_TO
       ? resend.emails.send({
           from,
           to: process.env.TEST_EMAIL_TO,
@@ -130,9 +150,15 @@ async function notifyWinner(
       : Promise.resolve(null),
   ]);
 
-  for (const r of results) {
-    if (r.status === "rejected") console.error("winner email failed:", r.reason);
+  for (const r of sends) {
+    if (r.status === "rejected") console.error("result email failed:", r.reason);
     else if (r.value && "error" in r.value && r.value.error)
-      console.error("winner email failed:", r.value.error);
+      console.error("result email failed:", r.value.error);
   }
+
+  const recipientSend = sends[0];
+  return (
+    recipientSend.status === "fulfilled" &&
+    !(recipientSend.value && "error" in recipientSend.value && recipientSend.value.error)
+  );
 }
