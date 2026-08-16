@@ -8,6 +8,7 @@ export type Signup = {
   ticket_number: number | null;
   ticket_week: string | null;
   is_winner: boolean;
+  verified_at: string | null;
 };
 
 // Server-only client. Uses the service role key so all reads/writes go

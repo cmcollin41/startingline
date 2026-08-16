@@ -58,3 +58,26 @@ export function verifyTicket(number: number, week: string, sig: string) {
   const given = Buffer.from(sig);
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
+
+// Signed token for the emailed confirmation link: proves the /verify visitor
+// got the link from the inbox we sent it to. No expiry — the reveal should
+// keep working whenever they get around to clicking.
+export function signupToken(id: string): string {
+  const sig = createHmac("sha256", lottoSecret())
+    .update(`verify-${id}`)
+    .digest("hex");
+  return `${id}.${sig}`;
+}
+
+export function parseSignupToken(token: string): string | null {
+  const dot = token.indexOf(".");
+  if (dot === -1) return null;
+  const id = token.slice(0, dot);
+  const expected = Buffer.from(
+    createHmac("sha256", lottoSecret()).update(`verify-${id}`).digest("hex")
+  );
+  const given = Buffer.from(token.slice(dot + 1));
+  return expected.length === given.length && timingSafeEqual(expected, given)
+    ? id
+    : null;
+}

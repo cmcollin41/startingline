@@ -38,12 +38,13 @@ export function WaitlistForm({ ticket }: { ticket: IssuedTicket }) {
               <>
                 <MailCheck className="text-primary size-10" />
                 <p className="text-lg font-medium">
-                  Your result is in your inbox
+                  Check your inbox to reveal your result
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  We emailed you whether ticket №{" "}
-                  {formatTicket(result.ticket)} matched this week&apos;s
-                  number. Don&apos;t see it? Check spam.
+                  We emailed you a confirmation link for ticket №{" "}
+                  {formatTicket(result.ticket)}. Click it to see whether you
+                  matched this week&apos;s number. Don&apos;t see it? Check
+                  spam.
                 </p>
               </>
             ) : (
@@ -83,8 +84,9 @@ export function WaitlistForm({ ticket }: { ticket: IssuedTicket }) {
                 : `You're already in — ticket № ${formatTicket(result.ticket)} is your entry`}
             </p>
             <p className="text-muted-foreground text-sm">
-              Your result was emailed when you joined. We&apos;ll email you
-              the moment we open.
+              {result.resent
+                ? "We re-sent your confirmation link — click it to reveal your result."
+                : "Your result lives behind the confirmation link we emailed you. We'll email you the moment we open."}
             </p>
           </CardContent>
         </Card>

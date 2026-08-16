@@ -1,9 +1,10 @@
 "use server";
 
 import { z } from "zod";
+import { headers } from "next/headers";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
-import { issueTicket, verifyTicket, winningNumber } from "@/lib/lotto";
+import { issueTicket, signupToken, verifyTicket, winningNumber } from "@/lib/lotto";
 
 const signupSchema = z.object({
   name: z.string().trim().min(1, "Please enter your name").max(100),
@@ -11,10 +12,11 @@ const signupSchema = z.object({
 });
 
 // The win/no-match outcome is deliberately never returned to the browser —
-// results go out by email only, so an unreachable address can't claim a win.
+// the reveal lives behind the emailed confirmation link, so an unreachable
+// address can't learn the result or claim a win.
 export type JoinResult =
   | { status: "success"; ticket: number; emailed: boolean }
-  | { status: "duplicate"; ticket: number | null }
+  | { status: "duplicate"; ticket: number | null; resent: boolean }
   | { status: "error"; message: string };
 
 export async function joinWaitlist(
@@ -48,25 +50,43 @@ export async function joinWaitlist(
 
   const won = ticket.number === winningNumber(ticket.week);
 
-  const { error } = await supabaseAdmin().from("signups").insert({
-    name,
-    email: email.toLowerCase(),
-    ticket_number: ticket.number,
-    ticket_week: ticket.week,
-    is_winner: won,
-    win_week: won ? ticket.week : null,
-  });
+  const { data: inserted, error } = await supabaseAdmin()
+    .from("signups")
+    .insert({
+      name,
+      email: email.toLowerCase(),
+      ticket_number: ticket.number,
+      ticket_week: ticket.week,
+      is_winner: won,
+      win_week: won ? ticket.week : null,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    // 23505 = unique_violation: the email is already on the list. Their
-    // result was emailed when they first joined — don't resend or reveal it.
-    if (error.code === "23505") {
+  if (error || !inserted) {
+    // 23505 = unique_violation: the email is already on the list. If they
+    // haven't confirmed yet, re-send their link (same inbox, so it's safe);
+    // never reveal anything on-page.
+    if (error?.code === "23505") {
       const { data } = await supabaseAdmin()
         .from("signups")
-        .select("ticket_number")
+        .select("id, name, ticket_number, verified_at")
         .eq("email", email.toLowerCase())
         .maybeSingle();
-      return { status: "duplicate", ticket: data?.ticket_number ?? null };
+      let resent = false;
+      if (data && !data.verified_at) {
+        resent = await sendConfirmEmail(
+          data.name,
+          email.toLowerCase(),
+          data.ticket_number,
+          data.id
+        );
+      }
+      return {
+        status: "duplicate",
+        ticket: data?.ticket_number ?? null,
+        resent,
+      };
     }
     console.error("joinWaitlist insert failed:", error);
     return {
@@ -75,90 +95,102 @@ export async function joinWaitlist(
     };
   }
 
-  const emailed = await sendResultEmail(
+  const emailed = await sendConfirmEmail(
     name,
     email.toLowerCase(),
     ticket.number,
-    ticket.week,
-    won
+    inserted.id
   );
+
+  if (won) {
+    await notifyOwnerOfWin(name, email.toLowerCase(), ticket.number, ticket.week);
+  }
 
   return { status: "success", ticket: ticket.number, emailed };
 }
 
-// The result email is the only reveal channel. Returns whether the send was
-// accepted, so the UI can warn when an address is unreachable — the win (if
-// any) is already recorded, and the owner heads-up below covers follow-up.
-async function sendResultEmail(
+async function siteOrigin() {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  return `${proto}://${host}`;
+}
+
+// The confirmation email never states the result — clicking the link routes
+// back to /verify, which records the click and reveals the stamped ticket.
+async function sendConfirmEmail(
   name: string,
   email: string,
-  ticket: number,
-  week: string,
-  won: boolean
+  ticket: number | null,
+  id: string
 ): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.error("sendResultEmail: RESEND_API_KEY is not configured");
+    console.error("sendConfirmEmail: RESEND_API_KEY is not configured");
     return false;
   }
 
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
-  const ticketLabel = String(ticket).padStart(3, "0");
-  const resend = new Resend(apiKey);
+  const ticketLabel = ticket === null ? "—" : String(ticket).padStart(3, "0");
+  const confirmUrl = `${await siteOrigin()}/verify?token=${signupToken(id)}`;
 
-  const result = won
-    ? {
-        subject: "Your startingline ticket won — $100 off at opening",
-        html: `
-          <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-            <h1 style="font-size: 20px;">You won, ${name}!</h1>
-            <p>Ticket <strong>№ ${ticketLabel}</strong> matched this week's number (${week}).</p>
-            <p>That's <strong>$100 off</strong> when the startingline store opens. Keep this email — it's your claim.</p>
-            <p style="color: #6b7280; font-size: 13px;">We'll send redemption details with the opening announcement.</p>
-          </div>
-        `,
-      }
-    : {
-        subject: `Ticket № ${ticketLabel} — this week's result`,
-        html: `
-          <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-            <h1 style="font-size: 20px;">You're on the list, ${name}</h1>
-            <p>Ticket <strong>№ ${ticketLabel}</strong> didn't match this week's number (${week}) — no win this time.</p>
-            <p>You're on the startingline waitlist and we'll email you the moment we open.</p>
-            <p style="color: #6b7280; font-size: 13px;">One ticket per email · a new number is drawn every Monday.</p>
-          </div>
-        `,
-      };
+  const { error } = await new Resend(apiKey).emails.send({
+    from,
+    to: email,
+    subject: `Confirm your email to reveal ticket № ${ticketLabel}`,
+    html: `
+      <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
+        <h1 style="font-size: 20px;">One click to your result, ${name}</h1>
+        <p>Ticket <strong>№ ${ticketLabel}</strong> is locked in. Confirm this
+        email address to see whether it matched this week's winning number —
+        a match is <strong>$100 off</strong> when the startingline store opens.</p>
+        <p style="margin: 24px 0;">
+          <a href="${confirmUrl}"
+             style="background: #171717; color: #fafafa; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+            Reveal my result
+          </a>
+        </p>
+        <p style="color: #6b7280; font-size: 13px;">Or paste this link into your
+        browser:<br/>${confirmUrl}</p>
+        <p style="color: #6b7280; font-size: 13px;">Results are only revealed to
+        confirmed addresses. One ticket per email.</p>
+      </div>
+    `,
+  });
 
-  const sends = await Promise.allSettled([
-    resend.emails.send({ from, to: email, ...result }),
-    // Heads-up to the store owner on wins so winners never go unnoticed —
-    // this also covers Resend's free tier, which only delivers to the
-    // account owner.
-    won && process.env.TEST_EMAIL_TO
-      ? resend.emails.send({
-          from,
-          to: process.env.TEST_EMAIL_TO,
-          subject: `Lotto winner: ${email} (ticket ${ticketLabel}, ${week})`,
-          html: `
-            <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-              <p><strong>${name}</strong> (${email}) just won the weekly draw with ticket <strong>№ ${ticketLabel}</strong> in ${week}.</p>
-              <p>They're owed $100 off at opening.</p>
-            </div>
-          `,
-        })
-      : Promise.resolve(null),
-  ]);
-
-  for (const r of sends) {
-    if (r.status === "rejected") console.error("result email failed:", r.reason);
-    else if (r.value && "error" in r.value && r.value.error)
-      console.error("result email failed:", r.value.error);
+  if (error) {
+    console.error("confirm email failed:", error);
+    return false;
   }
+  return true;
+}
 
-  const recipientSend = sends[0];
-  return (
-    recipientSend.status === "fulfilled" &&
-    !(recipientSend.value && "error" in recipientSend.value && recipientSend.value.error)
-  );
+// Heads-up so a win never goes unnoticed — sent at signup, before the winner
+// confirms. /admin shows whether they've confirmed yet.
+async function notifyOwnerOfWin(
+  name: string,
+  email: string,
+  ticket: number,
+  week: string
+) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const to = process.env.TEST_EMAIL_TO;
+  if (!apiKey || !to) return;
+
+  const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
+  const ticketLabel = String(ticket).padStart(3, "0");
+  const { error } = await new Resend(apiKey).emails.send({
+    from,
+    to,
+    subject: `Lotto winner: ${email} (ticket ${ticketLabel}, ${week})`,
+    html: `
+      <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
+        <p><strong>${name}</strong> (${email}) just won the weekly draw with
+        ticket <strong>№ ${ticketLabel}</strong> in ${week}.</p>
+        <p>The win counts once they confirm their email — check the admin
+        dashboard for their status. They're owed $100 off at opening.</p>
+      </div>
+    `,
+  });
+  if (error) console.error("owner win email failed:", error);
 }

@@ -37,7 +37,9 @@ export default async function AdminPage() {
 
   const { data, error } = await supabaseAdmin()
     .from("signups")
-    .select("id, name, email, created_at, ticket_number, ticket_week, is_winner")
+    .select(
+      "id, name, email, created_at, ticket_number, ticket_week, is_winner, verified_at"
+    )
     .order("created_at", { ascending: false });
 
   const signups = (data ?? []) as Signup[];
@@ -133,7 +135,19 @@ export default async function AdminPage() {
                             <span className="text-muted-foreground text-xs">
                               {signup.ticket_week}
                             </span>
-                            {signup.is_winner && <Badge>Winner · $100</Badge>}
+                            {signup.is_winner &&
+                              (signup.verified_at ? (
+                                <Badge>Winner · $100</Badge>
+                              ) : (
+                                <Badge variant="outline">
+                                  Winner — unconfirmed
+                                </Badge>
+                              ))}
+                            {!signup.is_winner && !signup.verified_at && (
+                              <span className="text-muted-foreground text-xs">
+                                unconfirmed
+                              </span>
+                            )}
                           </span>
                         )}
                       </TableCell>

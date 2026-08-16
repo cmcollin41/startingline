@@ -10,7 +10,10 @@ create table if not exists public.signups (
   ticket_number smallint,
   ticket_week text,
   is_winner boolean not null default false,
-  win_week text
+  win_week text,
+  -- Set on first click of the emailed confirmation link; a win only counts
+  -- once the address is confirmed.
+  verified_at timestamptz
 );
 
 -- The app only talks to Supabase from the server with the service role key,
