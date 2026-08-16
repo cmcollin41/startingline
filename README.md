@@ -3,6 +3,9 @@
 A simple waitlist tool: a public page to join (name + email), an admin view of
 signups, and a button that sends a real email through Resend.
 
+**Live demo:** https://startingline.vercel.app (admin at
+[/admin](https://startingline.vercel.app/admin))
+
 **Stack:** Next.js (App Router) · Tailwind CSS · shadcn/ui · Supabase (Postgres) · Resend · Vercel
 
 ## How it works
