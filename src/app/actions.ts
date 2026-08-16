@@ -4,6 +4,7 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getSchoolTheme, type SchoolTheme } from "@/lib/sportsmarks";
 import { issueTicket, signupToken, verifyTicket, winningNumber } from "@/lib/lotto";
 
 const signupSchema = z.object({
@@ -11,12 +12,24 @@ const signupSchema = z.object({
   email: z.email("Please enter a valid email address").max(254),
 });
 
+const schoolsSchema = z
+  .array(z.string().regex(/^[a-z0-9-]{1,80}$/))
+  .max(10);
+
+// Called from the client when a school is picked, so the ticket can dress in
+// the school's colors before submitting. Public brand data only.
+export async function fetchSchoolTheme(
+  slug: string
+): Promise<SchoolTheme | null> {
+  return getSchoolTheme(slug);
+}
+
 // The win/no-match outcome is deliberately never returned to the browser —
 // the reveal lives behind the emailed confirmation link, so an unreachable
 // address can't learn the result or claim a win.
 export type JoinResult =
   | { status: "success"; ticket: number; emailed: boolean }
-  | { status: "duplicate"; ticket: number | null; resent: boolean }
+  | { status: "duplicate"; ticket: number | null; resent: boolean; addedSchools: number }
   | { status: "error"; message: string };
 
 export async function joinWaitlist(
@@ -36,6 +49,25 @@ export async function joinWaitlist(
   }
 
   const { name, email } = parsed.data;
+
+  // Resolve the selected school lists against the sportsmarks API — anything
+  // that doesn't resolve (bad slug, tampered input) is dropped.
+  let slugs: string[] = [];
+  try {
+    slugs = schoolsSchema.parse(JSON.parse(String(formData.get("schools") ?? "[]")));
+  } catch {
+    slugs = [];
+  }
+  const schools = (
+    await Promise.all(slugs.map((slug) => getSchoolTheme(slug)))
+  ).filter((s): s is SchoolTheme => s !== null);
+
+  if (schools.length === 0) {
+    return {
+      status: "error",
+      message: "Pick at least one school to follow.",
+    };
+  }
 
   // The ticket shown on the page rides along as signed hidden fields. If the
   // signature doesn't check out (tampered, or a tab left open past the weekly
@@ -64,9 +96,9 @@ export async function joinWaitlist(
     .single();
 
   if (error || !inserted) {
-    // 23505 = unique_violation: the email is already on the list. If they
-    // haven't confirmed yet, re-send their link (same inbox, so it's safe);
-    // never reveal anything on-page.
+    // 23505 = unique_violation: the email is already on the list. Add any new
+    // school lists to their existing signup, and if they haven't confirmed
+    // yet, re-send their link (same inbox, so it's safe).
     if (error?.code === "23505") {
       const { data } = await supabaseAdmin()
         .from("signups")
@@ -74,18 +106,24 @@ export async function joinWaitlist(
         .eq("email", email.toLowerCase())
         .maybeSingle();
       let resent = false;
-      if (data && !data.verified_at) {
-        resent = await sendConfirmEmail(
-          data.name,
-          email.toLowerCase(),
-          data.ticket_number,
-          data.id
-        );
+      let addedSchools = 0;
+      if (data) {
+        addedSchools = await subscribeToSchools(data.id, schools);
+        if (!data.verified_at) {
+          resent = await sendConfirmEmail(
+            data.name,
+            email.toLowerCase(),
+            data.ticket_number,
+            data.id,
+            schools.map((s) => s.name)
+          );
+        }
       }
       return {
         status: "duplicate",
         ticket: data?.ticket_number ?? null,
         resent,
+        addedSchools,
       };
     }
     console.error("joinWaitlist insert failed:", error);
@@ -95,11 +133,14 @@ export async function joinWaitlist(
     };
   }
 
+  await subscribeToSchools(inserted.id, schools);
+
   const emailed = await sendConfirmEmail(
     name,
     email.toLowerCase(),
     ticket.number,
-    inserted.id
+    inserted.id,
+    schools.map((s) => s.name)
   );
 
   if (won) {
@@ -107,6 +148,34 @@ export async function joinWaitlist(
   }
 
   return { status: "success", ticket: ticket.number, emailed };
+}
+
+// Returns how many of the given schools were newly added (existing
+// subscriptions are left untouched).
+async function subscribeToSchools(
+  signupId: string,
+  schools: SchoolTheme[]
+): Promise<number> {
+  if (schools.length === 0) return 0;
+  const { data: existing } = await supabaseAdmin()
+    .from("school_subscriptions")
+    .select("school_slug")
+    .eq("signup_id", signupId);
+  const have = new Set((existing ?? []).map((r) => r.school_slug));
+  const fresh = schools.filter((s) => !have.has(s.slug));
+  if (fresh.length === 0) return 0;
+  const { error } = await supabaseAdmin().from("school_subscriptions").insert(
+    fresh.map((s) => ({
+      signup_id: signupId,
+      school_slug: s.slug,
+      school_name: s.name,
+    }))
+  );
+  if (error) {
+    console.error("subscribeToSchools insert failed:", error);
+    return 0;
+  }
+  return fresh.length;
 }
 
 async function siteOrigin() {
@@ -122,7 +191,8 @@ async function sendConfirmEmail(
   name: string,
   email: string,
   ticket: number | null,
-  id: string
+  id: string,
+  schoolNames: string[]
 ): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -133,6 +203,11 @@ async function sendConfirmEmail(
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
   const ticketLabel = ticket === null ? "—" : String(ticket).padStart(3, "0");
   const confirmUrl = `${await siteOrigin()}/verify?token=${signupToken(id)}`;
+  const lists =
+    schoolNames.length > 0
+      ? `<p>You're signed up for the weekly digest${schoolNames.length === 1 ? "" : "s"}:
+         <strong>${schoolNames.join("</strong>, <strong>")}</strong>.</p>`
+      : "";
 
   const { error } = await new Resend(apiKey).emails.send({
     from,
@@ -141,6 +216,7 @@ async function sendConfirmEmail(
     html: `
       <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
         <h1 style="font-size: 20px;">One click to your result, ${name}</h1>
+        ${lists}
         <p>Ticket <strong>№ ${ticketLabel}</strong> is locked in. Confirm this
         email address to see whether it matched this week's winning number —
         a match is <strong>$100 off</strong> when the startingline store opens.</p>

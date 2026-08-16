@@ -46,6 +46,20 @@ export default async function AdminPage() {
   const week = currentWeek();
   const winners = signups.filter((s) => s.is_winner).length;
 
+  const { data: subs } = await supabaseAdmin()
+    .from("school_subscriptions")
+    .select("signup_id, school_name")
+    .order("created_at");
+  const schoolsBySignup = new Map<string, string[]>();
+  const listCounts = new Map<string, number>();
+  for (const sub of subs ?? []) {
+    schoolsBySignup.set(sub.signup_id, [
+      ...(schoolsBySignup.get(sub.signup_id) ?? []),
+      sub.school_name,
+    ]);
+    listCounts.set(sub.school_name, (listCounts.get(sub.school_name) ?? 0) + 1);
+  }
+
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12">
       <div className="flex items-center justify-between gap-4">
@@ -88,6 +102,24 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
+      {listCounts.size > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Digest lists</CardTitle>
+            <CardDescription>Subscribers per school</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-1.5">
+            {[...listCounts.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .map(([school, count]) => (
+                <Badge key={school} variant="secondary">
+                  {school} · {count}
+                </Badge>
+              ))}
+          </CardContent>
+        </Card>
+      )}
+
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Could not load signups</AlertTitle>
@@ -113,6 +145,7 @@ export default async function AdminPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Schools</TableHead>
                     <TableHead>Ticket</TableHead>
                     <TableHead className="text-right">Joined</TableHead>
                   </TableRow>
@@ -124,6 +157,15 @@ export default async function AdminPage() {
                         {signup.name}
                       </TableCell>
                       <TableCell>{signup.email}</TableCell>
+                      <TableCell className="max-w-48">
+                        {schoolsBySignup.has(signup.id) ? (
+                          <span className="text-muted-foreground text-xs">
+                            {schoolsBySignup.get(signup.id)!.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {signup.ticket_number === null ? (
                           <span className="text-muted-foreground">—</span>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CircleX, PartyPopper, Ticket } from "lucide-react";
 import { parseSignupToken } from "@/lib/lotto";
+import { getSchoolTheme } from "@/lib/sportsmarks";
 import { supabaseAdmin } from "@/lib/supabase";
 import { LottoTicket, formatTicket } from "@/components/lotto-ticket";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,16 @@ export default async function VerifyPage({
       .is("verified_at", null);
   }
 
+  // Dress the ticket in their first-picked school's colors.
+  const { data: firstSub } = await supabaseAdmin()
+    .from("school_subscriptions")
+    .select("school_slug")
+    .eq("signup_id", signup.id)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  const theme = firstSub ? await getSchoolTheme(firstSub.school_slug) : null;
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-16">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -65,6 +76,7 @@ export default async function VerifyPage({
           number={signup.ticket_number}
           week={signup.ticket_week ?? ""}
           stamp={signup.is_winner ? "winner" : "nomatch"}
+          theme={theme}
           className="w-full"
         />
         <Card className="w-full">

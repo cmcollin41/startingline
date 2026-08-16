@@ -1,8 +1,27 @@
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 export function formatTicket(number: number) {
   return String(number).padStart(3, "0");
 }
+
+// The school skin for a ticket — serializable so it can cross the
+// server/client boundary from the sportsmarks lookup.
+export type TicketTheme = {
+  name: string;
+  paper: string;
+  paperAlt: string;
+  ink: string;
+  logoUrl: string | null;
+};
+
+const DEFAULT_THEME: TicketTheme = {
+  name: "Opening draw",
+  paper: "#F2A93B",
+  paperAlt: "#ED9E22",
+  ink: "#1D1812",
+  logoUrl: null,
+};
 
 // Barcode stripes derived from the ticket number so server and client render
 // identically (no randomness at render time).
@@ -22,28 +41,38 @@ export function LottoTicket({
   number,
   week,
   stamp,
+  theme,
   className,
 }: {
   number: number;
   week: string;
   stamp?: Stamp;
+  theme?: TicketTheme | null;
   className?: string;
 }) {
+  const t = theme ?? DEFAULT_THEME;
   return (
     <div
       className={cn(
-        "-rotate-1 drop-shadow-[0_10px_24px_rgba(35,26,16,0.25)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-4 motion-safe:duration-500",
+        "-rotate-1 drop-shadow-[0_10px_24px_rgba(20,16,12,0.28)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-4 motion-safe:duration-500",
         className
       )}
+      style={
+        {
+          "--tk-paper": t.paper,
+          "--tk-paper-alt": t.paperAlt,
+          "--tk-ink": t.ink,
+        } as CSSProperties
+      }
     >
-      <div className="relative flex w-full max-w-md overflow-hidden rounded-lg bg-[#F2A93B] text-[#231A10] select-none">
+      <div className="relative flex w-full max-w-md overflow-hidden rounded-lg bg-[var(--tk-paper)] text-[var(--tk-ink)] select-none">
         {/* hairline rules, like a ticket printed from a roll */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-[0.06]"
           style={{
             backgroundImage:
-              "repeating-linear-gradient(0deg, #231A10 0px, #231A10 1px, transparent 1px, transparent 4px)",
+              "repeating-linear-gradient(0deg, var(--tk-ink) 0px, var(--tk-ink) 1px, transparent 1px, transparent 4px)",
           }}
         />
 
@@ -53,25 +82,37 @@ export function LottoTicket({
             <span className="font-ticket text-sm font-semibold tracking-[0.25em] uppercase">
               Startingline
             </span>
-            <span className="font-ticket text-xs font-semibold tracking-[0.18em] uppercase opacity-70">
-              Opening draw
+            <span className="font-ticket max-w-[55%] truncate text-xs font-semibold tracking-[0.18em] uppercase opacity-70">
+              {t.name}
             </span>
           </div>
 
-          <div className="mt-3 flex items-end gap-2">
-            <span className="font-mono text-2xl leading-none font-bold opacity-60">
-              №
-            </span>
-            <span className="font-mono text-6xl leading-none font-bold tracking-[0.08em] tabular-nums sm:text-7xl">
-              {formatTicket(number)}
-            </span>
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <div className="flex items-end gap-2">
+              <span className="font-mono text-2xl leading-none font-bold opacity-60">
+                №
+              </span>
+              <span className="font-mono text-6xl leading-none font-bold tracking-[0.08em] tabular-nums sm:text-7xl">
+                {formatTicket(number)}
+              </span>
+            </div>
+            {t.logoUrl && (
+              <span className="grid size-14 shrink-0 place-items-center rounded-md bg-white p-1.5 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element -- external CDN asset, unknown dimensions */}
+                <img
+                  src={t.logoUrl}
+                  alt={`${t.name} logo`}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </span>
+            )}
           </div>
 
           <div className="mt-4 flex h-8 items-stretch gap-px" aria-hidden>
             {barcodeStripes(number).map((w, i) => (
               <div
                 key={i}
-                className="bg-[#231A10]"
+                className="bg-[var(--tk-ink)]"
                 style={{ width: `${w}px`, marginRight: `${(w * 7) % 3}px` }}
               />
             ))}
@@ -84,13 +125,13 @@ export function LottoTicket({
         </div>
 
         {/* perforation with tear notches */}
-        <div className="relative border-l-2 border-dashed border-[#231A10]/30">
+        <div className="relative border-l-2 border-dashed border-[var(--tk-ink)]/30">
           <div className="bg-background absolute -top-2.5 -left-2 size-4 rounded-full" />
           <div className="bg-background absolute -bottom-2.5 -left-2 size-4 rounded-full" />
         </div>
 
         {/* stub */}
-        <div className="relative flex w-20 flex-col items-center justify-between bg-[#ED9E22] px-2 py-4 text-center sm:w-24">
+        <div className="relative flex w-20 flex-col items-center justify-between bg-[var(--tk-paper-alt)] px-2 py-4 text-center sm:w-24">
           <span className="font-ticket text-[10px] font-semibold tracking-[0.3em] uppercase [writing-mode:vertical-rl] opacity-70">
             Weekly draw
           </span>
@@ -104,10 +145,10 @@ export function LottoTicket({
           <div className="absolute inset-0 grid place-items-center">
             <span
               className={cn(
-                "font-ticket -rotate-6 rounded-md border-4 border-double px-4 py-1.5 text-2xl font-bold tracking-[0.2em] uppercase mix-blend-multiply motion-safe:animate-in motion-safe:zoom-in-150 motion-safe:fade-in motion-safe:duration-300",
+                "font-ticket -rotate-6 rounded-md border-4 border-double px-4 py-1.5 text-2xl font-bold tracking-[0.2em] uppercase motion-safe:animate-in motion-safe:zoom-in-150 motion-safe:fade-in motion-safe:duration-300",
                 stamp === "winner"
-                  ? "border-[#C13527] text-[#C13527]"
-                  : "border-[#231A10]/60 text-[#231A10]/60"
+                  ? "bg-white/80 border-[#C13527] text-[#C13527]"
+                  : "bg-[var(--tk-paper)]/70 border-[var(--tk-ink)]/60 text-[var(--tk-ink)]/70"
               )}
             >
               {stamp === "winner" ? "Winner · $100" : "No match"}
