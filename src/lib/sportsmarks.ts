@@ -126,14 +126,39 @@ export async function getSchoolTheme(
   }>(`/institutions/${slug}/logos`);
   const logos = logoData?.logos ?? [];
   const logo = logos.find((l) => l.is_primary) ?? logos[0];
-  const files = [...(logo?.files ?? [])].sort(
-    (a, b) =>
-      (a.file_type === "svg" ? 0 : 1) - (b.file_type === "svg" ? 0 : 1) ||
-      a.display_order - b.display_order
-  );
-  const logoUrl =
-    files.find((f) => f.file_type === "svg" || f.file_type === "png")?.url ??
-    null;
+  const logoUrl = await resolveLogoUrl(logo?.files ?? []);
 
   return { slug, name: colorData.institution.name, paper, paperAlt, ink, logoUrl };
+}
+
+// SVG logos from the catalog sometimes ship without a viewBox, which makes
+// them render as a cropped corner instead of scaling into the ticket's logo
+// patch. Fetch the SVG (cached for a day), inject a viewBox derived from its
+// width/height when missing, and inline it as a data URI. PNG is the fallback.
+async function resolveLogoUrl(
+  files: { url: string; file_type: string }[]
+): Promise<string | null> {
+  const svg = files.find((f) => f.file_type === "svg");
+  const png = files.find((f) => f.file_type === "png");
+
+  if (svg) {
+    try {
+      const res = await fetch(svg.url, { next: { revalidate: 86400 } });
+      if (res.ok) {
+        let text = await res.text();
+        if (!/viewBox=/i.test(text)) {
+          const tag = text.match(/<svg[^>]*>/i)?.[0] ?? "";
+          const w = tag.match(/\swidth="([\d.]+)(?:px)?"/i)?.[1];
+          const h = tag.match(/\sheight="([\d.]+)(?:px)?"/i)?.[1];
+          if (w && h) {
+            text = text.replace(/<svg/i, `<svg viewBox="0 0 ${w} ${h}"`);
+          }
+        }
+        return `data:image/svg+xml;base64,${Buffer.from(text).toString("base64")}`;
+      }
+    } catch (err) {
+      console.error("logo svg fetch failed:", err);
+    }
+  }
+  return png?.url ?? null;
 }

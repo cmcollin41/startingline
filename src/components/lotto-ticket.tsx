@@ -97,7 +97,9 @@ export function LottoTicket({
               </span>
             </div>
             {t.logoUrl && (
-              <span className="grid size-14 shrink-0 place-items-center rounded-md bg-white p-1.5 shadow-sm">
+              // explicit dark color so SVG logos using currentColor don't
+              // inherit the ticket's white ink and vanish on the patch
+              <span className="grid size-14 shrink-0 place-items-center rounded-md bg-white p-1.5 text-[#1D1812] shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external CDN asset, unknown dimensions */}
                 <img
                   src={t.logoUrl}
