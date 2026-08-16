@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# startingline
 
-## Getting Started
+A simple waitlist tool: a public page to join (name + email), an admin view of
+signups, and a button that sends a real email through Resend.
 
-First, run the development server:
+**Stack:** Next.js (App Router) · Tailwind CSS · shadcn/ui · Supabase (Postgres) · Resend · Vercel
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## How it works
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- `/` — public waitlist form. Submits via a server action, validated with zod,
+  stored in a Supabase `signups` table (unique on email, duplicates handled
+  gracefully).
+- `/admin` — password-protected admin view listing all signups, newest first,
+  with a **Send test email** button that sends a real email through the Resend
+  SDK to a configured test address.
+- All database access happens server-side with the Supabase service role key;
+  the browser never talks to Supabase directly, and RLS is enabled on the table
+  as a second lock.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Supabase**: create a free project, then run `supabase/schema.sql` in the
+   SQL editor.
+2. **Resend**: create a free account and an API key. Without a verified domain
+   you can only send from `onboarding@resend.dev` to your own account email —
+   that is fine for this app.
+3. Copy the env file and fill it in:
 
-## Learn More
+   ```sh
+   cp .env.example .env.local
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+4. Install and run:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```sh
+   npm install
+   npm run dev
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Visit http://localhost:3000 (waitlist) and http://localhost:3000/admin
+(admin — use `ADMIN_PASSWORD`).
 
-## Deploy on Vercel
+## Deploy (Vercel)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Push this repo to GitHub and import it into Vercel.
+2. Add the same environment variables from `.env.example` in the Vercel
+   project settings.
+3. Deploy. Everything runs comfortably within the Vercel, Supabase, and Resend
+   free tiers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Decision log
+
+See [DECISIONS.md](./DECISIONS.md).
