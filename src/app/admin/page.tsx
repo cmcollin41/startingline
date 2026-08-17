@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { isAdminUser } from "@/lib/user-auth";
 import { currentWeek, winningNumber } from "@/lib/lotto";
+import { getSchoolTheme } from "@/lib/sportsmarks";
 import { formatTicket } from "@/components/lotto-ticket";
 import { supabaseAdmin, type Signup } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -104,17 +105,46 @@ export default async function AdminPage() {
 
   const { data: subs } = await supabaseAdmin()
     .from("school_subscriptions")
-    .select("signup_id, school_name")
+    .select("signup_id, school_slug, school_name")
     .order("created_at");
   const schoolsBySignup = new Map<string, string[]>();
-  const listCounts = new Map<string, number>();
+  const listBySlug = new Map<string, { name: string; count: number }>();
   for (const sub of subs ?? []) {
     schoolsBySignup.set(sub.signup_id, [
       ...(schoolsBySignup.get(sub.signup_id) ?? []),
       sub.school_name,
     ]);
-    listCounts.set(sub.school_name, (listCounts.get(sub.school_name) ?? 0) + 1);
+    const entry = listBySlug.get(sub.school_slug) ?? {
+      name: sub.school_name,
+      count: 0,
+    };
+    entry.count += 1;
+    listBySlug.set(sub.school_slug, entry);
   }
+
+  // One scannable row per school: logo, subscribers, latest edition stats.
+  const lists = await Promise.all(
+    [...listBySlug.entries()]
+      .sort((a, b) => b[1].count - a[1].count || a[1].name.localeCompare(b[1].name))
+      .map(async ([slug, { name, count }]) => {
+        const lastSend = digestSends.find((d) => d.school_name === name) ?? null;
+        return {
+          slug,
+          name,
+          count,
+          masthead: mastheads.get(name) ?? null,
+          logoUrl: (await getSchoolTheme(slug))?.logoUrl ?? null,
+          lastSend: lastSend
+            ? {
+                week: lastSend.week,
+                recipients: lastSend.recipient_count,
+                opens: opensBySend.get(lastSend.id) ?? 0,
+                clickers: clickersBySend.get(lastSend.id)?.size ?? 0,
+              }
+            : null,
+        };
+      })
+  );
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12">
@@ -159,7 +189,7 @@ export default async function AdminPage() {
         </CardContent>
       </Card>
 
-      {listCounts.size > 0 && (
+      {lists.length > 0 && (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Digest lists</CardTitle>
@@ -168,45 +198,72 @@ export default async function AdminPage() {
               Monday at 14:00 UTC to confirmed subscribers.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-wrap gap-1.5">
-              {[...listCounts.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .map(([school, count]) => (
-                  <Badge key={school} variant="secondary">
-                    {school} · {count}
-                    {mastheads.has(school) && (
-                      <span className="text-muted-foreground font-normal">
-                        — “{mastheads.get(school)}”
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>School</TableHead>
+                  <TableHead className="text-right">Subscribers</TableHead>
+                  <TableHead className="text-right">Last edition</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lists.map((l) => (
+                  <TableRow key={l.slug}>
+                    <TableCell>
+                      <span className="flex items-center gap-3">
+                        <span className="border-border grid size-9 shrink-0 place-items-center rounded-md border bg-white p-1 text-[#1D1812]">
+                          {l.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- external CDN asset, unknown dimensions
+                            <img
+                              src={l.logoUrl}
+                              alt=""
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground text-xs font-semibold">
+                              {l.name.charAt(0)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {l.name}
+                          </span>
+                          {l.masthead && (
+                            <span className="text-muted-foreground block truncate text-xs">
+                              “{l.masthead}”
+                            </span>
+                          )}
+                        </span>
                       </span>
-                    )}
-                  </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-base font-semibold tabular-nums">
+                      {l.count}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {l.lastSend ? (
+                        <span className="text-muted-foreground text-xs">
+                          <span className="text-foreground font-medium">
+                            {l.lastSend.week}
+                          </span>
+                          {" · "}
+                          {l.lastSend.recipients} sent · {l.lastSend.opens}{" "}
+                          opened
+                          {l.lastSend.recipients > 0 &&
+                            ` (${Math.round((l.lastSend.opens / l.lastSend.recipients) * 100)}%)`}{" "}
+                          · {l.lastSend.clickers} clicked
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          not sent yet
+                        </span>
+                      )}
+                    </TableCell>
+                  </TableRow>
                 ))}
-            </div>
-            {digestSends.length > 0 && (
-              <div className="text-muted-foreground flex flex-col gap-1 text-xs">
-                {digestSends.map((d) => {
-                  const opens = opensBySend.get(d.id) ?? 0;
-                  const clickers = clickersBySend.get(d.id)?.size ?? 0;
-                  const rate =
-                    d.recipient_count > 0
-                      ? Math.round((opens / d.recipient_count) * 100)
-                      : 0;
-                  return (
-                    <span key={d.id}>
-                      {d.week} · {d.school_name} → {d.recipient_count}{" "}
-                      sent · {opens} opened ({rate}%) · {clickers} clicked (
-                      {new Date(d.created_at).toLocaleString("en-US", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                        timeZone: "UTC",
-                      })}{" "}
-                      UTC)
-                    </span>
-                  );
-                })}
-              </div>
-            )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}
