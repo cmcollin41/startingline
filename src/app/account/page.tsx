@@ -10,6 +10,7 @@ import {
 import { supabaseAdmin } from "@/lib/supabase";
 import { LottoTicket } from "@/components/lotto-ticket";
 import { ShareLink } from "@/components/share-link";
+import { TicketDeck, type DeckTicket } from "@/components/ticket-deck";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -265,7 +266,23 @@ export default async function AccountPage() {
           </h2>
           {wonAny && <Badge>Winner · $100 gift card</Badge>}
         </div>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
+        {/* mobile: swipeable deck — the top card cycles to the bottom of the pile */}
+        <div className="sm:hidden">
+          <TicketDeck
+            tickets={tickets.map(
+              (t): DeckTicket => ({
+                key: t.key,
+                number: t.number,
+                week: t.week,
+                winner: t.winner,
+                label: t.label,
+                theme: (t.themeSlug ? themes.get(t.themeSlug) : null) ?? null,
+              })
+            )}
+          />
+        </div>
+        {/* desktop: the full spread */}
+        <div className="hidden gap-x-6 gap-y-5 sm:grid sm:grid-cols-2">
           {tickets.map((t) => (
             <figure key={t.key} className="flex min-w-0 flex-col gap-1.5">
               <LottoTicket
