@@ -47,6 +47,25 @@ export async function sendDigestNow(): Promise<DigestNowResult> {
   return { status: "success", result };
 }
 
+export type DeleteSignupResult =
+  | { status: "success" }
+  | { status: "error"; message: string };
+
+// Removes a user and everything attached to them (subscriptions, bonus
+// tickets, referral links, analytics rows) via cascade.
+export async function deleteSignup(id: string): Promise<DeleteSignupResult> {
+  if (!(await isAdmin())) {
+    return { status: "error", message: "Not authorized" };
+  }
+  const { error } = await supabaseAdmin().from("signups").delete().eq("id", id);
+  if (error) {
+    console.error("deleteSignup failed:", error);
+    return { status: "error", message: error.message };
+  }
+  revalidatePath("/admin");
+  return { status: "success" };
+}
+
 export type SendEmailResult =
   | { status: "success"; id: string; to: string }
   | { status: "error"; message: string };

@@ -267,6 +267,52 @@ async function sendConfirmEmail(
   return true;
 }
 
+export type LoginLinkResult = { status: "sent" } | null;
+
+// Passwordless sign-in: email a magic link. The response never reveals
+// whether the address is on the list.
+export async function sendLoginLink(
+  _prev: LoginLinkResult,
+  formData: FormData
+): Promise<LoginLinkResult> {
+  const parsed = z.email().safeParse(String(formData.get("email") ?? "").trim());
+  if (!parsed.success) return { status: "sent" };
+
+  const { data } = await supabaseAdmin()
+    .from("signups")
+    .select("id, name")
+    .eq("email", parsed.data.toLowerCase())
+    .maybeSingle();
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (data && apiKey) {
+    const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
+    const loginUrl = `${await siteOrigin()}/api/login?token=${signupToken(data.id)}&next=%2Faccount`;
+    const { error } = await new Resend(apiKey).emails.send({
+      from,
+      to: parsed.data.toLowerCase(),
+      subject: "Your startingline sign-in link",
+      html: `
+        <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
+          <h1 style="font-size: 20px;">Sign in, ${data.name}</h1>
+          <p>Click below to open your startingline account — your digests,
+          tickets, and invite link.</p>
+          <p style="margin: 24px 0;">
+            <a href="${loginUrl}"
+               style="background: #171717; color: #fafafa; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+              Sign in to my account
+            </a>
+          </p>
+          <p style="color: #6b7280; font-size: 13px;">If you didn't request this,
+          you can ignore this email.</p>
+        </div>
+      `,
+    });
+    if (error) console.error("login link email failed:", error);
+  }
+  return { status: "sent" };
+}
+
 // Heads-up so a win never goes unnoticed — sent at signup, before the winner
 // confirms. /admin shows whether they've confirmed yet.
 async function notifyOwnerOfWin(

@@ -3,6 +3,7 @@ import { currentWeek, winningNumber } from "@/lib/lotto";
 import { formatTicket } from "@/components/lotto-ticket";
 import { supabaseAdmin, type Signup } from "@/lib/supabase";
 import { AdminLoginForm } from "@/components/admin-login-form";
+import { DeleteUserButton } from "@/components/delete-user-button";
 import { SendDigestButton } from "@/components/send-digest-button";
 import { SendTestEmailButton } from "@/components/send-test-email-button";
 import { LogoutButton } from "@/components/logout-button";
@@ -66,6 +67,21 @@ export default async function AdminPage() {
     .order("created_at", { ascending: false })
     .limit(10);
   const digestSends = digestSendData ?? [];
+
+  const [{ data: openRows }, { data: clickRows }] = await Promise.all([
+    supabaseAdmin().from("digest_opens").select("digest_send_id, signup_id"),
+    supabaseAdmin().from("digest_clicks").select("digest_send_id, signup_id"),
+  ]);
+  const opensBySend = new Map<string, number>();
+  for (const o of openRows ?? []) {
+    opensBySend.set(o.digest_send_id, (opensBySend.get(o.digest_send_id) ?? 0) + 1);
+  }
+  const clickersBySend = new Map<string, Set<string>>();
+  for (const c of clickRows ?? []) {
+    const set = clickersBySend.get(c.digest_send_id) ?? new Set<string>();
+    set.add(c.signup_id);
+    clickersBySend.set(c.digest_send_id, set);
+  }
 
   const { data: mastheadData } = await supabaseAdmin()
     .from("digest_names")
@@ -158,18 +174,26 @@ export default async function AdminPage() {
             </div>
             {digestSends.length > 0 && (
               <div className="text-muted-foreground flex flex-col gap-1 text-xs">
-                {digestSends.map((d) => (
-                  <span key={d.id}>
-                    {d.week} · {d.school_name} → {d.recipient_count}{" "}
-                    recipient{d.recipient_count === 1 ? "" : "s"} (
-                    {new Date(d.created_at).toLocaleString("en-US", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                      timeZone: "UTC",
-                    })}{" "}
-                    UTC)
-                  </span>
-                ))}
+                {digestSends.map((d) => {
+                  const opens = opensBySend.get(d.id) ?? 0;
+                  const clickers = clickersBySend.get(d.id)?.size ?? 0;
+                  const rate =
+                    d.recipient_count > 0
+                      ? Math.round((opens / d.recipient_count) * 100)
+                      : 0;
+                  return (
+                    <span key={d.id}>
+                      {d.week} · {d.school_name} → {d.recipient_count}{" "}
+                      sent · {opens} opened ({rate}%) · {clickers} clicked (
+                      {new Date(d.created_at).toLocaleString("en-US", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                        timeZone: "UTC",
+                      })}{" "}
+                      UTC)
+                    </span>
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -204,6 +228,7 @@ export default async function AdminPage() {
                     <TableHead>Schools</TableHead>
                     <TableHead>Ticket</TableHead>
                     <TableHead className="text-right">Joined</TableHead>
+                    <TableHead className="w-10" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -264,6 +289,9 @@ export default async function AdminPage() {
                           timeZone: "UTC",
                         })}{" "}
                         UTC
+                      </TableCell>
+                      <TableCell>
+                        <DeleteUserButton id={signup.id} email={signup.email} />
                       </TableCell>
                     </TableRow>
                   ))}

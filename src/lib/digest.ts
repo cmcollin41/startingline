@@ -132,23 +132,26 @@ export async function sendWeeklyDigest(
     recipients: Recipient[]
   ) => {
     // Idempotency lock: claiming the (school, week) row must succeed before
-    // any email goes out.
-    const { error: lockError } = await supabaseAdmin()
+    // any email goes out. The row's id keys open/click analytics.
+    const { data: lock, error: lockError } = await supabaseAdmin()
       .from("digest_sends")
       .insert({
         school_slug: slug,
         school_name: name,
         week,
         recipient_count: recipients.length,
-      });
-    if (lockError) {
-      if (lockError.code === "23505") {
+      })
+      .select("id")
+      .single();
+    if (lockError || !lock) {
+      if (lockError?.code === "23505") {
         result.skipped.push(name);
       } else {
-        result.errors.push(`${name}: lock failed (${lockError.message})`);
+        result.errors.push(`${name}: lock failed (${lockError?.message})`);
       }
       return;
     }
+    const sendId = lock.id as string;
 
     const theme = await getSchoolTheme(slug);
     const headlines = await fetchHeadlines(name);
@@ -209,7 +212,7 @@ export async function sendWeeklyDigest(
       from,
       to: r.email,
       subject: `${masthead} — ${subjectLead}`,
-      html: digestHtml(slug, name, masthead, week, theme, headlines, edited, r, origin),
+      html: digestHtml(slug, name, masthead, week, theme, headlines, edited, r, origin, sendId),
     }));
 
     // Resend batch accepts up to 100 emails per call.
@@ -258,8 +261,13 @@ function digestHtml(
   headlines: Headline[],
   edited: EditedDigest | null,
   recipient: Recipient,
-  origin: string
+  origin: string,
+  sendId: string
 ) {
+  const token = signupToken(recipient.id);
+  // Story links route through /api/click so we can count readers who engage.
+  const track = (target: string) =>
+    `${origin}/api/click?d=${sendId}&t=${token}&u=${encodeURIComponent(target)}`;
   const paper = theme?.paper ?? "#F2A93B";
   const ink = theme?.ink ?? "#1D1812";
   const logo = theme?.pngLogoUrl
@@ -274,7 +282,7 @@ function digestHtml(
         .map(
           (s) => `
       <div style="margin: 0 0 18px;">
-        <a href="${s.link}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(s.headline)}</a>
+        <a href="${track(s.link)}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(s.headline)}</a>
         <p style="margin: 4px 0 0; color: #4b5563; font-size: 13px;">${escapeHtml(s.summary)}
         <span style="color: #9ca3af;">· ${escapeHtml(s.source)}</span></p>
       </div>`
@@ -286,7 +294,7 @@ function digestHtml(
           .map(
             (h) => `
       <p style="margin: 0 0 16px;">
-        <a href="${h.link}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(h.title)}</a>
+        <a href="${track(h.link)}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(h.title)}</a>
         ${h.source ? `<br/><span style="color: #6b7280; font-size: 12px;">${escapeHtml(h.source)}</span>` : ""}
       </p>`
           )
@@ -295,7 +303,8 @@ function digestHtml(
   const inviteUrl = recipient.refCode
     ? `${origin}/?ref=${recipient.refCode}`
     : origin;
-  const unsubUrl = `${origin}/unsubscribe?token=${signupToken(recipient.id)}&school=${encodeURIComponent(schoolSlug)}`;
+  const accountUrl = `${origin}/api/login?token=${token}&next=%2Faccount`;
+  const unsubUrl = `${origin}/unsubscribe?token=${token}&school=${encodeURIComponent(schoolSlug)}`;
 
   return `
     <div style="font-family: system-ui, sans-serif; max-width: 520px; margin: 0 auto;">
@@ -321,9 +330,11 @@ function digestHtml(
         </div>
         <p style="color: #9ca3af; font-size: 11px; margin: 24px 0 0;">
           You're getting this because you joined the ${escapeHtml(schoolName)} list on startingline.
+          <a href="${accountUrl}" style="color: #9ca3af;">Manage your subscriptions</a> ·
           <a href="${unsubUrl}" style="color: #9ca3af;">Unsubscribe from this digest</a>
         </p>
       </div>
+      <img src="${origin}/api/open?d=${sendId}&t=${token}" width="1" height="1" alt="" style="display: block;" />
     </div>
   `;
 }

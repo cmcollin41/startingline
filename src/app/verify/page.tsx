@@ -2,8 +2,8 @@ import Link from "next/link";
 import { CircleX, PartyPopper, Ticket, UserPlus } from "lucide-react";
 import { parseSignupToken } from "@/lib/lotto";
 import {
+  confirmSignup,
   ensureRefCode,
-  grantReferralBonus,
   siteOrigin,
 } from "@/lib/referrals";
 import { getSchoolTheme } from "@/lib/sportsmarks";
@@ -57,19 +57,9 @@ export default async function VerifyPage({
     );
   }
 
-  // First click confirms the address; later clicks just re-show the result.
-  // Confirming is also the moment the person who invited them earns their
-  // bonus ticket — signup alone isn't enough, so fake emails earn nothing.
-  if (!signup.verified_at) {
-    await supabaseAdmin()
-      .from("signups")
-      .update({ verified_at: new Date().toISOString() })
-      .eq("id", signup.id)
-      .is("verified_at", null);
-    if (signup.referred_by) {
-      await grantReferralBonus(signup.referred_by, signup.id);
-    }
-  }
+  // First click confirms the address (and triggers the inviter's bonus
+  // ticket — signup alone isn't enough, so fake emails earn nothing).
+  await confirmSignup(signup.id);
 
   // Dress the tickets in their first-picked school's colors.
   const { data: firstSub } = await supabaseAdmin()
@@ -179,6 +169,11 @@ export default async function VerifyPage({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            <Button asChild className="self-center">
+              <a href={`/api/login?token=${encodeURIComponent(String(token))}&next=%2Faccount`}>
+                Manage my account
+              </a>
+            </Button>
             <ShareLink url={shareUrl} />
             {invitees.length > 0 && (
               <ul className="flex flex-col gap-1.5 text-sm">

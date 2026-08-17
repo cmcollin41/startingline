@@ -38,6 +38,29 @@ export async function siteOrigin() {
   return `${proto}://${host}`;
 }
 
+// Marks a signup's email as confirmed (first time only) and triggers the
+// referral bonus for whoever invited them. Called from both the /verify
+// reveal page and /api/login — any click on an emailed link proves the inbox.
+export async function confirmSignup(signupId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin()
+    .from("signups")
+    .select("id, verified_at, referred_by")
+    .eq("id", signupId)
+    .maybeSingle();
+  if (!data) return false;
+  if (!data.verified_at) {
+    await supabaseAdmin()
+      .from("signups")
+      .update({ verified_at: new Date().toISOString() })
+      .eq("id", signupId)
+      .is("verified_at", null);
+    if (data.referred_by) {
+      await grantReferralBonus(data.referred_by, signupId);
+    }
+  }
+  return true;
+}
+
 // Called when an invitee confirms their email for the first time. Deals the
 // referrer one fresh ticket in the current week's draw and tells them about
 // it. The unique constraint on referred_signup_id makes this idempotent.

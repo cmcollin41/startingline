@@ -23,6 +23,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
         </p>
       </div>
       <WaitlistForm ticket={ticket} schools={schools} refCode={refCode} />
+      <p className="text-muted-foreground text-sm">
+        Already in?{" "}
+        <a href="/signin" className="text-foreground underline underline-offset-4">
+          Sign in to manage your digests
+        </a>
+      </p>
     </main>
   );
 }
