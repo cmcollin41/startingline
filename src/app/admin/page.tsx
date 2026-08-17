@@ -1,8 +1,9 @@
-import { isAdmin } from "@/lib/admin-auth";
+import Link from "next/link";
+import { isAdminUser } from "@/lib/user-auth";
 import { currentWeek, winningNumber } from "@/lib/lotto";
 import { formatTicket } from "@/components/lotto-ticket";
 import { supabaseAdmin, type Signup } from "@/lib/supabase";
-import { AdminLoginForm } from "@/components/admin-login-form";
+import { Button } from "@/components/ui/button";
 import { DeleteUserButton } from "@/components/delete-user-button";
 import { SendDigestButton } from "@/components/send-digest-button";
 import { SendTestEmailButton } from "@/components/send-test-email-button";
@@ -29,10 +30,19 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  if (!(await isAdmin())) {
+  if (!(await isAdminUser())) {
     return (
-      <main className="flex flex-1 items-center justify-center px-4 py-16">
-        <AdminLoginForm />
+      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Admins only
+        </h1>
+        <p className="text-muted-foreground max-w-md text-balance">
+          This dashboard requires an admin account. Sign in with your email
+          link and come back.
+        </p>
+        <Button asChild size="sm">
+          <Link href="/signin">Log in</Link>
+        </Button>
       </main>
     );
   }

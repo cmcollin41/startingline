@@ -2,35 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
-import {
-  createSession,
-  destroySession,
-  isAdmin,
-  verifyPassword,
-} from "@/lib/admin-auth";
+import { isAdminUser } from "@/lib/user-auth";
 import { sendWeeklyDigest, type DigestRunResult } from "@/lib/digest";
 import { siteOrigin } from "@/lib/referrals";
 import { supabaseAdmin } from "@/lib/supabase";
-
-export type LoginResult = { status: "error"; message: string } | null;
-
-export async function login(
-  _prev: LoginResult,
-  formData: FormData
-): Promise<LoginResult> {
-  const password = formData.get("password");
-  if (typeof password !== "string" || !verifyPassword(password)) {
-    return { status: "error", message: "Incorrect password" };
-  }
-  await createSession();
-  revalidatePath("/admin");
-  return null;
-}
-
-export async function logout() {
-  await destroySession();
-  revalidatePath("/admin");
-}
 
 export type DigestNowResult =
   | { status: "success"; result: DigestRunResult }
@@ -39,7 +14,7 @@ export type DigestNowResult =
 // Manual trigger for this week's digest run. Idempotent — schools already
 // sent this week are skipped, so clicking twice can't double-send.
 export async function sendDigestNow(): Promise<DigestNowResult> {
-  if (!(await isAdmin())) {
+  if (!(await isAdminUser())) {
     return { status: "error", message: "Not authorized" };
   }
   const result = await sendWeeklyDigest(await siteOrigin());
@@ -54,7 +29,7 @@ export type DeleteSignupResult =
 // Removes a user and everything attached to them (subscriptions, bonus
 // tickets, referral links, analytics rows) via cascade.
 export async function deleteSignup(id: string): Promise<DeleteSignupResult> {
-  if (!(await isAdmin())) {
+  if (!(await isAdminUser())) {
     return { status: "error", message: "Not authorized" };
   }
   const { error } = await supabaseAdmin().from("signups").delete().eq("id", id);
@@ -71,7 +46,7 @@ export type SendEmailResult =
   | { status: "error"; message: string };
 
 export async function sendTestEmail(): Promise<SendEmailResult> {
-  if (!(await isAdmin())) {
+  if (!(await isAdminUser())) {
     return { status: "error", message: "Not authorized" };
   }
 

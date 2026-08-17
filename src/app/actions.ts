@@ -90,6 +90,14 @@ export async function joinWaitlist(
 
   const won = ticket.number === winningNumber(ticket.week);
 
+  // Bootstrap admins by email: addresses in ADMIN_EMAILS (comma-separated)
+  // get role 'admin' at signup, so no hand-editing the database.
+  const isAdminEmail = (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(email.toLowerCase());
+
   // Arrived via a share link? Credit the referrer — the bonus ticket itself
   // is granted later, when this signup confirms their email.
   let referredBy: string | null = null;
@@ -113,6 +121,7 @@ export async function joinWaitlist(
       is_winner: won,
       win_week: won ? ticket.week : null,
       referred_by: referredBy,
+      role: isAdminEmail ? "admin" : "user",
     })
     .select("id")
     .single();

@@ -16,7 +16,9 @@ create table if not exists public.signups (
   verified_at timestamptz,
   -- Referral loop: this signup's share code, and who invited them.
   ref_code text unique,
-  referred_by uuid references public.signups (id)
+  referred_by uuid references public.signups (id),
+  -- 'admin' unlocks the /admin dashboard; everyone else is 'user'.
+  role text not null default 'user' check (role in ('user', 'admin'))
 );
 
 -- Bonus tickets earned by inviting friends: one per invitee who signs up and

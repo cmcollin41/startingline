@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { LogOut } from "lucide-react";
-import { logout } from "@/app/admin/actions";
+import { signOut } from "@/app/account/actions";
 import { Button } from "@/components/ui/button";
 
 export function LogoutButton() {
@@ -12,7 +12,7 @@ export function LogoutButton() {
     <Button
       variant="outline"
       disabled={pending}
-      onClick={() => startTransition(() => logout())}
+      onClick={() => startTransition(() => signOut())}
     >
       <LogOut className="size-4" />
       Log out

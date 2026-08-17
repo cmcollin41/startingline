@@ -10,6 +10,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 const SESSION_COOKIE = "user_session";
 
+// ADMIN_PASSWORD no longer gates anything — it survives only as the HMAC
+// secret for session cookies. Rotating it signs everyone out.
 function secret() {
   const password = process.env.ADMIN_PASSWORD;
   if (!password) {
@@ -54,15 +56,22 @@ export async function currentUserId(): Promise<string | null> {
 export async function currentSignup(): Promise<{
   id: string;
   name: string;
+  role: "user" | "admin";
 } | null> {
   const id = await currentUserId();
   if (!id) return null;
   const { data } = await supabaseAdmin()
     .from("signups")
-    .select("id, name")
+    .select("id, name, role")
     .eq("id", id)
     .maybeSingle();
-  return data;
+  return data as { id: string; name: string; role: "user" | "admin" } | null;
+}
+
+// Admin = a signed-in user whose signup row carries role 'admin'. This is
+// the only admin gate — there is no separate admin login.
+export async function isAdminUser() {
+  return (await currentSignup())?.role === "admin";
 }
 
 export async function destroyUserSession() {
