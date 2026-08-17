@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
 import { isAdminUser } from "@/lib/user-auth";
-import { sendWeeklyDigest, type DigestRunResult } from "@/lib/digest";
+import {
+  resendLatestDigests,
+  sendWeeklyDigest,
+  type DigestRunResult,
+  type ResendResult,
+} from "@/lib/digest";
 import { siteOrigin } from "@/lib/referrals";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -19,6 +24,22 @@ export async function sendDigestNow(): Promise<DigestNowResult> {
   }
   const result = await sendWeeklyDigest(await siteOrigin());
   revalidatePath("/admin");
+  return { status: "success", result };
+}
+
+export type ResendDigestResult =
+  | { status: "success"; result: ResendResult }
+  | { status: "error"; message: string };
+
+// Re-send the latest edition of each subscribed school's digest to one
+// signup — rebuilt from the stored stories, so no research pass runs.
+export async function resendDigest(
+  signupId: string
+): Promise<ResendDigestResult> {
+  if (!(await isAdminUser())) {
+    return { status: "error", message: "Not authorized" };
+  }
+  const result = await resendLatestDigests(signupId, await siteOrigin());
   return { status: "success", result };
 }
 

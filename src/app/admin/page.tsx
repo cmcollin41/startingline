@@ -5,6 +5,7 @@ import { formatTicket } from "@/components/lotto-ticket";
 import { supabaseAdmin, type Signup } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { DeleteUserButton } from "@/components/delete-user-button";
+import { ResendDigestButton } from "@/components/resend-digest-button";
 import { SendDigestButton } from "@/components/send-digest-button";
 import { SendTestEmailButton } from "@/components/send-test-email-button";
 import { LogoutButton } from "@/components/logout-button";
@@ -238,7 +239,7 @@ export default async function AdminPage() {
                     <TableHead>Schools</TableHead>
                     <TableHead>Ticket</TableHead>
                     <TableHead className="text-right">Joined</TableHead>
-                    <TableHead className="w-10" />
+                    <TableHead className="w-20" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -301,7 +302,18 @@ export default async function AdminPage() {
                         UTC
                       </TableCell>
                       <TableCell>
-                        <DeleteUserButton id={signup.id} email={signup.email} />
+                        <span className="flex items-center justify-end gap-0.5">
+                          {schoolsBySignup.has(signup.id) && (
+                            <ResendDigestButton
+                              id={signup.id}
+                              email={signup.email}
+                            />
+                          )}
+                          <DeleteUserButton
+                            id={signup.id}
+                            email={signup.email}
+                          />
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}

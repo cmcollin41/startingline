@@ -252,6 +252,138 @@ export async function sendWeeklyDigest(
   return result;
 }
 
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+export type ResendResult = {
+  sent: { school: string; week: string }[];
+  skipped: string[]; // schools with no edition on file
+  errors: string[];
+};
+
+// Re-send the most recent edition of each subscribed school's digest to one
+// signup, rebuilt from the stored stories — no research pass, no new
+// digest_sends row (opens/clicks keep keying off the original send).
+export async function resendLatestDigests(
+  signupId: string,
+  origin: string
+): Promise<ResendResult> {
+  const result: ResendResult = { sent: [], skipped: [], errors: [] };
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    result.errors.push("RESEND_API_KEY is not configured");
+    return result;
+  }
+  const resend = new Resend(apiKey);
+  const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
+
+  const { data: signup } = await supabaseAdmin()
+    .from("signups")
+    .select("id, name, email, ref_code")
+    .eq("id", signupId)
+    .maybeSingle();
+  if (!signup) {
+    result.errors.push("Signup not found");
+    return result;
+  }
+  const recipient: Recipient = {
+    id: signup.id,
+    name: signup.name,
+    email: signup.email,
+    refCode: signup.ref_code,
+  };
+
+  const { data: subs } = await supabaseAdmin()
+    .from("school_subscriptions")
+    .select("school_slug, school_name")
+    .eq("signup_id", signupId)
+    .order("created_at");
+  if (!subs?.length) {
+    result.errors.push("This signup follows no schools");
+    return result;
+  }
+
+  for (const sub of subs) {
+    const { data: send } = await supabaseAdmin()
+      .from("digest_sends")
+      .select("id, week")
+      .eq("school_slug", sub.school_slug)
+      .order("week", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!send) {
+      result.skipped.push(sub.school_name);
+      continue;
+    }
+
+    const { data: storiesData } = await supabaseAdmin()
+      .from("digest_stories")
+      .select("title, url, summary")
+      .eq("school_slug", sub.school_slug)
+      .eq("week", send.week)
+      .order("created_at");
+    const stories = storiesData ?? [];
+    if (stories.length === 0) {
+      result.skipped.push(sub.school_name);
+      continue;
+    }
+
+    const theme = await getSchoolTheme(sub.school_slug);
+    const masthead = await getMasthead(sub.school_slug, sub.school_name);
+
+    // Editions with stored summaries rebuild the edited layout (minus the
+    // intro, which isn't kept); older ones fall back to plain headlines.
+    const edited: EditedDigest | null = stories.every((s) => s.summary)
+      ? {
+          intro: "",
+          stories: stories.map((s) => ({
+            headline: s.title,
+            summary: s.summary as string,
+            source: sourceHost(s.url),
+            link: s.url,
+          })),
+        }
+      : null;
+    const headlines: Headline[] = stories.map((s) => ({
+      title: s.title,
+      link: s.url,
+      source: sourceHost(s.url) || null,
+    }));
+
+    const subjectLead = stories[0].title;
+    const { error: sendError } = await resend.emails.send({
+      from,
+      to: recipient.email,
+      subject: `${masthead} — ${subjectLead}`,
+      html: digestHtml(
+        sub.school_slug,
+        sub.school_name,
+        masthead,
+        send.week,
+        theme,
+        headlines,
+        edited,
+        recipient,
+        origin,
+        send.id as string
+      ),
+    });
+    if (sendError) {
+      result.errors.push(`${sub.school_name}: ${sendError.message}`);
+    } else {
+      result.sent.push({ school: sub.school_name, week: send.week });
+    }
+  }
+
+  return result;
+}
+
 function digestHtml(
   schoolSlug: string,
   schoolName: string,
@@ -274,7 +406,7 @@ function digestHtml(
     ? `<img src="${theme.pngLogoUrl}" alt="" width="44" height="44"
          style="display: block; max-width: 44px; max-height: 44px; object-fit: contain; background: #ffffff; border-radius: 8px; padding: 4px;" />`
     : "";
-  const intro = edited
+  const intro = edited?.intro
     ? `<p style="margin: 0 0 20px; color: #374151; font-size: 15px;">${escapeHtml(edited.intro)}</p>`
     : "";
   const stories = edited
