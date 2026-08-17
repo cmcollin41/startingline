@@ -82,10 +82,12 @@ export function LottoTicket({
             the ticket wider than the space it was given */}
         <div className="relative min-w-0 flex-1 p-4 @xs:p-5 @sm:p-6">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-ticket shrink-0 text-sm font-semibold tracking-[0.25em] uppercase">
+            {/* letter-spacing relaxes as the ticket narrows, so a long school
+                name keeps more of itself before the ellipsis */}
+            <span className="font-ticket shrink-0 text-sm font-semibold tracking-[0.18em] uppercase @sm:tracking-[0.25em]">
               Startingline
             </span>
-            <span className="font-ticket min-w-0 truncate text-xs font-semibold tracking-[0.18em] uppercase opacity-70">
+            <span className="font-ticket min-w-0 truncate text-[11px] font-semibold tracking-[0.08em] uppercase opacity-70 @xs:tracking-[0.12em] @sm:text-xs @sm:tracking-[0.18em]">
               {t.name}
             </span>
           </div>
