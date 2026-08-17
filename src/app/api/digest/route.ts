@@ -1,5 +1,8 @@
 import { sendWeeklyDigest } from "@/lib/digest";
 
+// The editorial research pass takes minutes — use the full function window.
+export const maxDuration = 300;
+
 // Triggered by Vercel Cron (Mondays 14:00 UTC — see vercel.json), guarded by
 // CRON_SECRET. Idempotent per (school, week), so retries are harmless.
 export async function GET(req: Request) {

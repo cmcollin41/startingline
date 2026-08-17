@@ -125,7 +125,11 @@ export async function sendWeeklyDigest(
     bySchool.set(row.school_slug, entry);
   }
 
-  for (const [slug, { name, recipients }] of bySchool) {
+  const processSchool = async (
+    slug: string,
+    name: string,
+    recipients: Recipient[]
+  ) => {
     // Idempotency lock: claiming the (school, week) row must succeed before
     // any email goes out.
     const { error: lockError } = await supabaseAdmin()
@@ -142,7 +146,7 @@ export async function sendWeeklyDigest(
       } else {
         result.errors.push(`${name}: lock failed (${lockError.message})`);
       }
-      continue;
+      return;
     }
 
     const theme = await getSchoolTheme(slug);
@@ -166,13 +170,25 @@ export async function sendWeeklyDigest(
     // Record what this edition covered, so future editions don't repeat it —
     // for the fallback path, that's the raw headlines we're about to send.
     const covered = edited
-      ? edited.stories.map((s) => ({ title: s.headline, url: s.link }))
-      : headlines.slice(0, 5).map((h) => ({ title: h.title, url: h.link }));
+      ? edited.stories.map((s) => ({
+          title: s.headline,
+          url: s.link,
+          summary: s.summary,
+        }))
+      : headlines
+          .slice(0, 5)
+          .map((h) => ({ title: h.title, url: h.link, summary: null }));
     if (covered.length > 0) {
       const { error: storiesError } = await supabaseAdmin()
         .from("digest_stories")
         .insert(
-          covered.map((c) => ({ school_slug: slug, week, title: c.title, url: c.url }))
+          covered.map((c) => ({
+            school_slug: slug,
+            week,
+            title: c.title,
+            url: c.url,
+            summary: c.summary,
+          }))
         );
       if (storiesError) {
         console.error(`${name}: digest_stories insert failed:`, storiesError);
@@ -200,7 +216,27 @@ export async function sendWeeklyDigest(
       }
     }
     result.sent.push({ school: name, recipients: sent });
-  }
+  };
+
+  // The editorial research pass is the slow part (minutes per school), so
+  // schools run concurrently, a few at a time.
+  const queue = [...bySchool.entries()];
+  const workers = Array.from(
+    { length: Math.min(4, queue.length) },
+    async () => {
+      for (;;) {
+        const next = queue.shift();
+        if (!next) return;
+        const [slug, { name, recipients }] = next;
+        try {
+          await processSchool(slug, name, recipients);
+        } catch (err) {
+          result.errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+  );
+  await Promise.all(workers);
 
   return result;
 }
