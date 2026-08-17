@@ -132,12 +132,11 @@ export default async function VerifyPage({
               <>
                 <PartyPopper className="size-10 text-[#C13527]" />
                 <p className="text-lg font-medium">
-                  You have a match — a $100 gift card is yours
+                  You have a match — a $100 Woodn Grail gift card is yours
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Good for officially licensed school gear from brands like
-                  woodngrail.com. Your win is confirmed to this email address —
-                  redemption details are on the way.
+                  Good at woodngrail.com. Your win is confirmed to this email
+                  address — your gift card is on the way.
                 </p>
               </>
             ) : (

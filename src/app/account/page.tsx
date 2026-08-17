@@ -264,7 +264,7 @@ export default async function AccountPage() {
               · newest first
             </span>
           </h2>
-          {wonAny && <Badge>Winner · $100 gift card</Badge>}
+          {wonAny && <Badge>Winner · $100 Woodn Grail gift card</Badge>}
         </div>
         {/* mobile: swipeable deck — the top card cycles to the bottom of the pile */}
         <div className="sm:hidden">

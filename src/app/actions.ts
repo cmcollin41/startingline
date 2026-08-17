@@ -244,8 +244,8 @@ async function sendConfirmEmail(
         ${lists}
         <p>Ticket <strong>№ ${ticketLabel}</strong> is locked in. Confirm this
         email address to see whether it matched this week's winning number —
-        a match wins a <strong>$100 gift card</strong> toward officially
-        licensed ${school ?? "school"} gear from brands like woodngrail.com.</p>
+        a match wins a <strong>$100 Woodn Grail gift card</strong>
+        (woodngrail.com).</p>
         <p style="margin: 24px 0;">
           <a href="${confirmUrl}"
              style="background: #171717; color: #fafafa; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
@@ -336,8 +336,8 @@ async function notifyOwnerOfWin(
         <p><strong>${name}</strong> (${email}) just won the weekly draw with
         ticket <strong>№ ${ticketLabel}</strong> in ${week}.</p>
         <p>The win counts once they confirm their email — check the admin
-        dashboard for their status. They're owed a $100 gift card toward
-        officially licensed school gear (e.g. woodngrail.com).</p>
+        dashboard for their status. They're owed a $100 Woodn Grail gift card
+        (woodngrail.com).</p>
       </div>
     `,
   });

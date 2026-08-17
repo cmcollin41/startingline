@@ -324,8 +324,8 @@ function digestHtml(
         <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin-top: 24px;">
           <p style="margin: 0 0 8px; font-weight: 600; font-size: 14px;">This week's draw is live 🎟️</p>
           <p style="margin: 0; color: #4b5563; font-size: 13px;">Every friend who joins with your link and confirms
-          earns you another ticket — a match wins a $100 gift card for officially licensed
-          ${escapeHtml(schoolName)} gear.</p>
+          earns you another ticket — a match wins a $100 Woodn Grail gift card
+          (woodngrail.com).</p>
           <p style="margin: 12px 0 0;"><a href="${inviteUrl}" style="color: #111827; font-weight: 600; font-size: 13px;">${inviteUrl}</a></p>
         </div>
         <p style="color: #9ca3af; font-size: 11px; margin: 24px 0 0;">

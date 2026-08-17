@@ -23,7 +23,8 @@ const barlowCondensed = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: "startingline",
-  description: "Join the startingline waitlist",
+  description:
+    "The best weekly digest for alumni — stay in the loop on your alma mater in 2-3 minutes every week.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

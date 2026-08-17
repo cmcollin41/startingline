@@ -129,9 +129,8 @@ export function LottoTicket({
           </div>
 
           <p className="mt-3 text-[11px] leading-snug opacity-70">
-            Match the weekly number to win a $100 gift card for officially
-            licensed school gear. One ticket per email · draw resets every
-            Monday.
+            Match the weekly number to win a $100 Woodn Grail gift card. One
+            ticket per email · draw resets every Monday.
           </p>
         </div>
 

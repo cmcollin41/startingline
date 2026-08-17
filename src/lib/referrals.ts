@@ -84,7 +84,7 @@ export async function grantReferralBonus(
        bonus ticket in this week's draw: <strong>№ ${label}</strong>
        (${week}).</p>`,
     footer: `Every friend who joins and confirms earns you another ticket. A
-      match wins a $100 gift card for officially licensed school gear.`,
+      match wins a $100 Woodn Grail gift card (woodngrail.com).`,
     winnerNote: "referral bonus ticket",
   });
 }
@@ -111,8 +111,7 @@ export async function grantSchoolBonus(
        not just sports, all things ${school.name}.</p>
        <p>Adding a school earns you a fresh ticket in this week's draw:
        <strong>№ ${label}</strong> (${week}).</p>`,
-    footer: `A match wins a $100 gift card for officially licensed school gear
-      from brands like woodngrail.com.`,
+    footer: `A match wins a $100 Woodn Grail gift card (woodngrail.com).`,
     winnerNote: "school-opt-in bonus ticket",
   });
 }
@@ -194,8 +193,8 @@ async function sendBonusEmails(
               <p><strong>${person.name}</strong> (${person.email}) just won the
               weekly draw with a ${copy.winnerNote}
               <strong>№ ${label}</strong> in ${ticket.week}.</p>
-              <p>They're owed a $100 gift card toward officially licensed
-              school gear (e.g. woodngrail.com).</p>
+              <p>They're owed a $100 Woodn Grail gift card
+              (woodngrail.com).</p>
             </div>
           `,
         })

@@ -219,9 +219,8 @@ export function WaitlistForm({
               {pending ? "Sending…" : "Join and email my result"}
             </Button>
             <p className="text-muted-foreground text-center text-xs">
-              Results go out by email only. The weekly winner gets a $100 gift
-              card toward officially licensed school gear from brands like
-              woodngrail.com.
+              Results go out by email only. The weekly winner gets a $100
+              Woodn Grail gift card (woodngrail.com).
             </p>
           </form>
         </CardContent>
