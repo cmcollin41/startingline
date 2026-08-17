@@ -255,8 +255,10 @@ export default async function AdminPage() {
                           {" · "}
                           {l.lastSend.recipients} sent · {l.lastSend.opens}{" "}
                           opened
+                          {/* resends reuse the original send's tracking, so
+                              opens can exceed recipients — cap the rate */}
                           {l.lastSend.recipients > 0 &&
-                            ` (${Math.round((l.lastSend.opens / l.lastSend.recipients) * 100)}%)`}{" "}
+                            ` (${Math.min(100, Math.round((l.lastSend.opens / l.lastSend.recipients) * 100))}%)`}{" "}
                           · {l.lastSend.clickers} clicked
                         </span>
                       ) : (
