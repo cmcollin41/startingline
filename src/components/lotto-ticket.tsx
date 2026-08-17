@@ -65,7 +65,9 @@ export function LottoTicket({
         } as CSSProperties
       }
     >
-      <div className="relative flex w-full max-w-md overflow-hidden rounded-lg bg-[var(--tk-paper)] text-[var(--tk-ink)] select-none">
+      {/* @container so the ticket sizes off its own width, not the viewport —
+          it has to survive a narrow phone and a two-up grid column alike */}
+      <div className="@container relative flex w-full max-w-md overflow-hidden rounded-lg bg-[var(--tk-paper)] text-[var(--tk-ink)] select-none">
         {/* hairline rules, like a ticket printed from a roll */}
         <div
           aria-hidden
@@ -76,30 +78,31 @@ export function LottoTicket({
           }}
         />
 
-        {/* main panel */}
-        <div className="relative flex-1 p-5 sm:p-6">
+        {/* main panel — min-w-0 so it yields to the stub instead of pushing
+            the ticket wider than the space it was given */}
+        <div className="relative min-w-0 flex-1 p-4 @xs:p-5 @sm:p-6">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="font-ticket text-sm font-semibold tracking-[0.25em] uppercase">
+            <span className="font-ticket shrink-0 text-sm font-semibold tracking-[0.25em] uppercase">
               Startingline
             </span>
-            <span className="font-ticket max-w-[55%] truncate text-xs font-semibold tracking-[0.18em] uppercase opacity-70">
+            <span className="font-ticket min-w-0 truncate text-xs font-semibold tracking-[0.18em] uppercase opacity-70">
               {t.name}
             </span>
           </div>
 
           <div className="mt-3 flex items-end justify-between gap-3">
-            <div className="flex items-end gap-2">
+            <div className="flex min-w-0 items-end gap-2">
               <span className="font-mono text-2xl leading-none font-bold opacity-60">
                 №
               </span>
-              <span className="font-mono text-6xl leading-none font-bold tracking-[0.08em] tabular-nums sm:text-7xl">
+              <span className="font-mono text-[clamp(2.5rem,17cqw,4.5rem)] leading-none font-bold tracking-[0.08em] tabular-nums">
                 {formatTicket(number)}
               </span>
             </div>
             {t.logoUrl && (
               // explicit dark color so SVG logos using currentColor don't
               // inherit the ticket's white ink and vanish on the patch
-              <span className="grid size-14 shrink-0 place-items-center rounded-md bg-white p-1.5 text-[#1D1812] shadow-sm">
+              <span className="grid size-11 shrink-0 place-items-center rounded-md bg-white p-1.5 text-[#1D1812] shadow-sm @sm:size-14">
                 {/* eslint-disable-next-line @next/next/no-img-element -- external CDN asset, unknown dimensions */}
                 <img
                   src={t.logoUrl}
@@ -110,7 +113,10 @@ export function LottoTicket({
             )}
           </div>
 
-          <div className="mt-4 flex h-8 items-stretch gap-px" aria-hidden>
+          <div
+            className="mt-4 flex h-8 items-stretch gap-px overflow-hidden"
+            aria-hidden
+          >
             {barcodeStripes(number).map((w, i) => (
               <div
                 key={i}
@@ -134,12 +140,12 @@ export function LottoTicket({
         </div>
 
         {/* stub */}
-        <div className="relative flex w-20 flex-col items-center justify-between bg-[var(--tk-paper-alt)] px-2 py-4 text-center sm:w-24">
+        <div className="relative flex w-18 shrink-0 flex-col items-center justify-between bg-[var(--tk-paper-alt)] px-2 py-4 text-center @xs:w-20 @sm:w-24">
           <span className="font-ticket text-[10px] font-semibold tracking-[0.3em] uppercase [writing-mode:vertical-rl] opacity-70">
             Weekly draw
           </span>
           <span className="font-ticket text-2xl font-bold">$100</span>
-          <span className="font-mono text-[10px] tracking-widest opacity-70">
+          <span className="font-mono text-[10px] tracking-wider whitespace-nowrap opacity-70 @sm:tracking-widest">
             {week}
           </span>
         </div>
@@ -148,7 +154,7 @@ export function LottoTicket({
           <div className="absolute inset-0 grid place-items-center">
             <span
               className={cn(
-                "font-ticket -rotate-6 rounded-md border-4 border-double px-4 py-1.5 text-2xl font-bold tracking-[0.2em] uppercase motion-safe:animate-in motion-safe:zoom-in-150 motion-safe:fade-in motion-safe:duration-300",
+                "font-ticket -rotate-6 rounded-md border-4 border-double px-3 py-1.5 text-lg tracking-[0.15em] @xs:px-4 @xs:text-xl @sm:text-2xl @sm:tracking-[0.2em] font-bold uppercase motion-safe:animate-in motion-safe:zoom-in-150 motion-safe:fade-in motion-safe:duration-300",
                 stamp === "winner"
                   ? "bg-white/80 border-[#C13527] text-[#C13527]"
                   : "bg-[var(--tk-paper)]/70 border-[var(--tk-ink)]/60 text-[var(--tk-ink)]/70"

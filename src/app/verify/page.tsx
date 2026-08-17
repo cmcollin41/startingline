@@ -71,11 +71,13 @@ export default async function VerifyPage({
     .maybeSingle();
   const theme = firstSub ? await getSchoolTheme(firstSub.school_slug) : null;
 
+  // Newest first — bonus tickets are always younger than the original entry,
+  // so the signup ticket brings up the rear.
   const { data: bonusData } = await supabaseAdmin()
     .from("bonus_tickets")
     .select("id, ticket_number, ticket_week, is_winner")
     .eq("signup_id", signup.id)
-    .order("created_at");
+    .order("created_at", { ascending: false });
   const bonuses = bonusData ?? [];
 
   const wonAny = signup.is_winner || bonuses.some((b) => b.is_winner);
@@ -99,19 +101,12 @@ export default async function VerifyPage({
         <h1 className="text-4xl font-semibold tracking-tight">startingline</h1>
         <p className="text-muted-foreground max-w-md text-balance">
           Email confirmed, {signup.name} — here&apos;s how your{" "}
-          {bonuses.length > 0 ? "tickets" : "ticket"} did.
+          {bonuses.length > 0 ? "tickets" : "ticket"} did
+          {bonuses.length > 0 ? ", newest first" : ""}.
         </p>
       </div>
 
-      <div className="flex w-full max-w-md flex-col items-center gap-6">
-        <LottoTicket
-          number={signup.ticket_number}
-          week={signup.ticket_week ?? ""}
-          stamp={signup.is_winner ? "winner" : "nomatch"}
-          theme={theme}
-          className="w-full"
-        />
-
+      <div className="flex w-full max-w-md min-w-0 flex-col items-center gap-6">
         {bonuses.map((b) => (
           <LottoTicket
             key={b.id}
@@ -122,6 +117,14 @@ export default async function VerifyPage({
             className="w-full"
           />
         ))}
+
+        <LottoTicket
+          number={signup.ticket_number}
+          week={signup.ticket_week ?? ""}
+          stamp={signup.is_winner ? "winner" : "nomatch"}
+          theme={theme}
+          className="w-full"
+        />
 
         <Card className="w-full">
           <CardContent className="flex flex-col items-center gap-3 py-8 text-center">

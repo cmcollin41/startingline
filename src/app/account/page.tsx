@@ -265,9 +265,9 @@ export default async function AccountPage() {
           </h2>
           {wonAny && <Badge>Winner · $100 gift card</Badge>}
         </div>
-        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
           {tickets.map((t) => (
-            <figure key={t.key} className="flex flex-col gap-1.5">
+            <figure key={t.key} className="flex min-w-0 flex-col gap-1.5">
               <LottoTicket
                 number={t.number}
                 week={t.week}
