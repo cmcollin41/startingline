@@ -53,19 +53,22 @@ export async function currentUserId(): Promise<string | null> {
 
 // A signed cookie can outlive its signup row (e.g. the account was deleted),
 // so anything that branches on "signed in" must confirm the row still exists.
-export async function currentSignup(): Promise<{
+export type SessionSignup = {
   id: string;
   name: string;
+  email: string;
   role: "user" | "admin";
-} | null> {
+};
+
+export async function currentSignup(): Promise<SessionSignup | null> {
   const id = await currentUserId();
   if (!id) return null;
   const { data } = await supabaseAdmin()
     .from("signups")
-    .select("id, name, role")
+    .select("id, name, email, role")
     .eq("id", id)
     .maybeSingle();
-  return data as { id: string; name: string; role: "user" | "admin" } | null;
+  return data as SessionSignup | null;
 }
 
 // Admin = a signed-in user whose signup row carries role 'admin'. This is

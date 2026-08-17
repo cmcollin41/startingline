@@ -107,27 +107,6 @@ export default async function VerifyPage({
       </div>
 
       <div className="flex w-full max-w-md min-w-0 flex-col items-center gap-6">
-        {bonuses.map((b) => (
-          <LottoTicket
-            key={b.id}
-            number={b.ticket_number}
-            week={b.ticket_week}
-            stamp={b.is_winner ? "winner" : "nomatch"}
-            theme={theme}
-            torn
-            className="w-full"
-          />
-        ))}
-
-        <LottoTicket
-          number={signup.ticket_number}
-          week={signup.ticket_week ?? ""}
-          stamp={signup.is_winner ? "winner" : "nomatch"}
-          theme={theme}
-          torn
-          className="w-full"
-        />
-
         <Card className="w-full">
           <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
             {wonAny ? (
@@ -204,6 +183,27 @@ export default async function VerifyPage({
             )}
           </CardContent>
         </Card>
+
+        {bonuses.map((b) => (
+          <LottoTicket
+            key={b.id}
+            number={b.ticket_number}
+            week={b.ticket_week}
+            stamp={b.is_winner ? "winner" : "nomatch"}
+            theme={theme}
+            torn
+            className="w-full"
+          />
+        ))}
+
+        <LottoTicket
+          number={signup.ticket_number}
+          week={signup.ticket_week ?? ""}
+          stamp={signup.is_winner ? "winner" : "nomatch"}
+          theme={theme}
+          torn
+          className="w-full"
+        />
       </div>
     </main>
   );

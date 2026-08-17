@@ -1,17 +1,10 @@
 import { redirect } from "next/navigation";
-import { LogOut, Plus, UserPlus, X } from "lucide-react";
+import { Plus, UserPlus, X } from "lucide-react";
 import { currentUserId } from "@/lib/user-auth";
 import { ensureRefCode, siteOrigin } from "@/lib/referrals";
-import {
-  getSchoolTheme,
-  listSchools,
-  type SchoolTheme,
-} from "@/lib/sportsmarks";
+import { listSchools } from "@/lib/sportsmarks";
 import { supabaseAdmin } from "@/lib/supabase";
-import { LottoTicket } from "@/components/lotto-ticket";
 import { ShareLink } from "@/components/share-link";
-import { TicketDeck, type DeckTicket } from "@/components/ticket-deck";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,35 +13,24 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { addSubscription, removeSubscription, signOut } from "./actions";
+import { addSubscription, removeSubscription } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type TicketRow = {
-  key: string;
-  number: number;
-  week: string;
-  winner: boolean;
-  label: string;
-  themeSlug: string | null;
-};
-
-export default async function AccountPage() {
+// Overview tab: the referral link front and center, then the school
+// subscriptions. Tickets and past digests live on their own tabs.
+export default async function AccountOverviewPage() {
   const userId = await currentUserId();
   if (!userId) redirect("/signin");
 
   const { data: signup } = await supabaseAdmin()
     .from("signups")
-    .select(
-      "id, name, email, ticket_number, ticket_week, is_winner, verified_at, ref_code"
-    )
+    .select("id, ref_code")
     .eq("id", userId)
     .maybeSingle();
-  // Session cookie outlived the signup row (account deleted) — clear it via
-  // the logout route, since a render can't mutate cookies itself.
   if (!signup) redirect("/api/logout");
 
-  const [{ data: subsData }, { data: bonusData }, { data: inviteeData }, schools] =
+  const [{ data: subsData }, { count: bonusCount }, { data: inviteeData }, schools] =
     await Promise.all([
       supabaseAdmin()
         .from("school_subscriptions")
@@ -57,9 +39,8 @@ export default async function AccountPage() {
         .order("created_at"),
       supabaseAdmin()
         .from("bonus_tickets")
-        .select("id, ticket_number, ticket_week, is_winner, source, school_slug")
-        .eq("signup_id", signup.id)
-        .order("created_at", { ascending: false }),
+        .select("id", { count: "exact", head: true })
+        .eq("signup_id", signup.id),
       supabaseAdmin()
         .from("signups")
         .select("id, name, verified_at")
@@ -68,7 +49,7 @@ export default async function AccountPage() {
       listSchools(),
     ]);
   const subs = subsData ?? [];
-  const bonuses = bonusData ?? [];
+  const bonuses = bonusCount ?? 0;
   const invitees = (inviteeData ?? []).map((i) => ({
     id: i.id,
     firstName: i.name.trim().split(/\s+/)[0],
@@ -85,68 +66,50 @@ export default async function AccountPage() {
   const mastheads = new Map(
     (mastheadData ?? []).map((m) => [m.school_slug, m.digest_name])
   );
-  const schoolNames = new Map(schools.map((s) => [s.slug, s.name]));
-
-  // Every ticket wears the school it came from: school bonuses use their
-  // source school, referral bonuses and the original entry use the account's
-  // first-followed school. Newest first.
-  const firstSlug = subs[0]?.school_slug ?? null;
-  const tickets: TicketRow[] = [
-    ...bonuses.map((b) => ({
-      key: b.id,
-      number: b.ticket_number,
-      week: b.ticket_week,
-      winner: b.is_winner,
-      label:
-        b.source === "school" && b.school_slug
-          ? `Bonus — followed ${schoolNames.get(b.school_slug) ?? b.school_slug}`
-          : "Bonus — invite confirmed",
-      themeSlug: b.source === "school" && b.school_slug ? b.school_slug : firstSlug,
-    })),
-    ...(signup.ticket_number !== null
-      ? [
-          {
-            key: "original",
-            number: signup.ticket_number,
-            week: signup.ticket_week ?? "",
-            winner: signup.is_winner,
-            label: "Original entry",
-            themeSlug: firstSlug,
-          },
-        ]
-      : []),
-  ];
-
-  const themeSlugs = [...new Set(tickets.map((t) => t.themeSlug).filter(Boolean))] as string[];
-  const themes = new Map<string, SchoolTheme | null>(
-    await Promise.all(
-      themeSlugs.map(
-        async (slug) => [slug, await getSchoolTheme(slug)] as const
-      )
-    )
-  );
 
   const shareUrl = `${await siteOrigin()}/?ref=${await ensureRefCode(signup.id, signup.ref_code)}`;
   const subscribed = new Set(subs.map((s) => s.school_slug));
   const available = schools.filter((s) => !subscribed.has(s.slug));
-  const wonAny = tickets.some((t) => t.winner);
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-4 py-10">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Hey, {signup.name.trim().split(/\s+/)[0]}
-          </h1>
-          <p className="text-muted-foreground text-sm">{signup.email}</p>
-        </div>
-        <form action={signOut}>
-          <Button variant="outline" size="sm" type="submit">
-            <LogOut className="size-4" />
-            Sign out
-          </Button>
-        </form>
-      </div>
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserPlus className="size-4" />
+            Invite friends, earn tickets
+          </CardTitle>
+          <CardDescription>
+            Every friend who joins with your link and confirms their email
+            earns you another ticket in that week&apos;s draw.
+            {bonuses > 0 &&
+              ` You've earned ${bonuses} bonus ticket${bonuses === 1 ? "" : "s"} so far.`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <ShareLink url={shareUrl} />
+          {invitees.length > 0 && (
+            <ul className="flex flex-col gap-1.5 text-sm">
+              {invitees.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{i.firstName}</span>
+                  <span
+                    className={
+                      i.confirmed
+                        ? "text-primary text-xs"
+                        : "text-muted-foreground text-xs"
+                    }
+                  >
+                    {i.confirmed
+                      ? "confirmed ✓ — ticket earned"
+                      : "waiting on email confirmation"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -219,93 +182,6 @@ export default async function AccountPage() {
           )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="size-4" />
-            Invite friends, earn tickets
-          </CardTitle>
-          <CardDescription>
-            Every friend who joins with your link and confirms their email
-            earns you another ticket in that week&apos;s draw.
-            {bonuses.length > 0 &&
-              ` You've earned ${bonuses.length} bonus ticket${bonuses.length === 1 ? "" : "s"} so far.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <ShareLink url={shareUrl} />
-          {invitees.length > 0 && (
-            <ul className="flex flex-col gap-1.5 text-sm">
-              {invitees.map((i) => (
-                <li key={i.id} className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{i.firstName}</span>
-                  <span
-                    className={
-                      i.confirmed
-                        ? "text-primary text-xs"
-                        : "text-muted-foreground text-xs"
-                    }
-                  >
-                    {i.confirmed
-                      ? "confirmed ✓ — ticket earned"
-                      : "waiting on email confirmation"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      <section className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-medium">
-            Your tickets{" "}
-            <span className="text-muted-foreground text-sm font-normal">
-              · newest first
-            </span>
-          </h2>
-          {wonAny && <Badge>Winner · $100 Woodn Grail gift card</Badge>}
-        </div>
-        {/* mobile: swipeable deck — the top card cycles to the bottom of the pile */}
-        <div className="sm:hidden">
-          <TicketDeck
-            tickets={tickets.map(
-              (t): DeckTicket => ({
-                key: t.key,
-                number: t.number,
-                week: t.week,
-                winner: t.winner,
-                label: t.label,
-                theme: (t.themeSlug ? themes.get(t.themeSlug) : null) ?? null,
-              })
-            )}
-          />
-        </div>
-        {/* desktop: the full spread */}
-        <div className="hidden gap-x-6 gap-y-5 sm:grid sm:grid-cols-2">
-          {tickets.map((t) => (
-            <figure key={t.key} className="flex min-w-0 flex-col gap-1.5">
-              <LottoTicket
-                number={t.number}
-                week={t.week}
-                stamp={t.winner ? "winner" : "nomatch"}
-                theme={t.themeSlug ? themes.get(t.themeSlug) : null}
-                torn
-                className="w-full"
-              />
-              <figcaption className="text-muted-foreground text-center text-xs">
-                {t.label} · {t.week}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-        <p className="text-muted-foreground text-center text-xs">
-          A new winning number is drawn every Monday — earn more tickets by
-          inviting friends or following another school.
-        </p>
-      </section>
-    </main>
+    </div>
   );
 }
