@@ -52,11 +52,13 @@ export default async function AdminPage() {
   const { data, error } = await supabaseAdmin()
     .from("signups")
     .select(
-      "id, name, email, created_at, ticket_number, ticket_week, is_winner, verified_at"
+      "id, name, email, created_at, ticket_number, ticket_week, is_winner, verified_at, referred_by"
     )
     .order("created_at", { ascending: false });
 
-  const signups = (data ?? []) as Signup[];
+  const signups = (data ?? []) as (Signup & { referred_by: string | null })[];
+  // Referrers are signups themselves, so the inviter's name resolves locally.
+  const nameById = new Map(signups.map((s) => [s.id, s.name]));
   const week = currentWeek();
 
   const { data: bonusData } = await supabaseAdmin()
@@ -302,8 +304,14 @@ export default async function AdminPage() {
                 <TableBody>
                   {signups.map((signup) => (
                     <TableRow key={signup.id}>
-                      <TableCell className="font-medium">
-                        {signup.name}
+                      <TableCell>
+                        <span className="block font-medium">{signup.name}</span>
+                        {signup.referred_by && (
+                          <span className="text-muted-foreground block text-xs">
+                            invited by{" "}
+                            {nameById.get(signup.referred_by) ?? "a deleted user"}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>{signup.email}</TableCell>
                       <TableCell className="max-w-48">
