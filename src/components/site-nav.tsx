@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Ticket } from "lucide-react";
+import { ShieldCheck, Ticket } from "lucide-react";
 import { currentSignup, currentUserId } from "@/lib/user-auth";
 import { Button } from "@/components/ui/button";
 
@@ -22,9 +22,19 @@ export async function SiteNav() {
         </Link>
         <nav className="flex items-center gap-1">
           {signup ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/account">Hello, {firstName}</Link>
-            </Button>
+            <>
+              {signup.role === "admin" && (
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/admin">
+                    <ShieldCheck className="size-4" />
+                    Admin
+                  </Link>
+                </Button>
+              )}
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/account">Hello, {firstName}</Link>
+              </Button>
+            </>
           ) : (
             <Button asChild variant="ghost" size="sm">
               <Link href={stale ? "/api/logout" : "/signin"}>Log in</Link>
