@@ -47,71 +47,130 @@ export async function grantReferralBonus(
 ) {
   if (referrerId === referredId) return;
 
+  const granted = await grantBonusTicket(referrerId, {
+    source: "referral",
+    referred_signup_id: referredId,
+  });
+  if (!granted) return;
+
+  await sendBonusEmails(referrerId, granted, {
+    subject: (label) => `Your invite joined — bonus ticket № ${label} is yours`,
+    intro: (name, label, week) =>
+      `<h1 style="font-size: 20px;">Nice one, ${name}</h1>
+       <p>Someone you invited just confirmed their signup, so you earned a
+       bonus ticket in this week's draw: <strong>№ ${label}</strong>
+       (${week}).</p>`,
+    footer: `Every friend who joins and confirms earns you another ticket. A
+      match wins a $100 gift card for officially licensed school gear.`,
+    winnerNote: "referral bonus ticket",
+  });
+}
+
+// Called when an existing signup comes back and opts into another school's
+// digest — each new school deals one fresh ticket, unique per (signup,
+// school) so re-adding the same school earns nothing.
+export async function grantSchoolBonus(
+  signupId: string,
+  school: { slug: string; name: string }
+) {
+  const granted = await grantBonusTicket(signupId, {
+    source: "school",
+    school_slug: school.slug,
+  });
+  if (!granted) return;
+
+  await sendBonusEmails(signupId, granted, {
+    subject: (label) =>
+      `You're following ${school.name} — bonus ticket № ${label}`,
+    intro: (name, label, week) =>
+      `<h1 style="font-size: 20px;">Welcome to the ${school.name} digest, ${name}</h1>
+       <p>You're opting into the <strong>${school.name}</strong> weekly digest —
+       not just sports, all things ${school.name}.</p>
+       <p>Adding a school earns you a fresh ticket in this week's draw:
+       <strong>№ ${label}</strong> (${week}).</p>`,
+    footer: `A match wins a $100 gift card for officially licensed school gear
+      from brands like woodngrail.com.`,
+    winnerNote: "school-opt-in bonus ticket",
+  });
+}
+
+type GrantedTicket = { number: number; week: string; won: boolean };
+
+async function grantBonusTicket(
+  signupId: string,
+  extra: Record<string, string>
+): Promise<GrantedTicket | null> {
   const ticket = issueTicket();
   const won = ticket.number === winningNumber(ticket.week);
-
   const { error } = await supabaseAdmin().from("bonus_tickets").insert({
-    signup_id: referrerId,
-    referred_signup_id: referredId,
+    signup_id: signupId,
     ticket_number: ticket.number,
     ticket_week: ticket.week,
     is_winner: won,
+    ...extra,
   });
   if (error) {
-    // 23505 = unique_violation: this invitee already granted a bonus.
+    // 23505 = unique_violation: this bonus was already granted.
     if (error.code !== "23505") {
-      console.error("grantReferralBonus insert failed:", error);
+      console.error("grantBonusTicket insert failed:", error);
     }
-    return;
+    return null;
   }
+  return { number: ticket.number, week: ticket.week, won };
+}
 
-  const { data: referrer } = await supabaseAdmin()
+async function sendBonusEmails(
+  signupId: string,
+  ticket: GrantedTicket,
+  copy: {
+    subject: (label: string) => string;
+    intro: (name: string, label: string, week: string) => string;
+    footer: string;
+    winnerNote: string;
+  }
+) {
+  const { data: person } = await supabaseAdmin()
     .from("signups")
     .select("name, email")
-    .eq("id", referrerId)
+    .eq("id", signupId)
     .maybeSingle();
-  if (!referrer) return;
+  if (!person) return;
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
-  const ticketLabel = String(ticket.number).padStart(3, "0");
-  const revealUrl = `${await siteOrigin()}/verify?token=${signupToken(referrerId)}`;
+  const label = String(ticket.number).padStart(3, "0");
+  const revealUrl = `${await siteOrigin()}/verify?token=${signupToken(signupId)}`;
   const resend = new Resend(apiKey);
 
   const sends = await Promise.allSettled([
     resend.emails.send({
       from,
-      to: referrer.email,
-      subject: `Your invite joined — bonus ticket № ${ticketLabel} is yours`,
+      to: person.email,
+      subject: copy.subject(label),
       html: `
         <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-          <h1 style="font-size: 20px;">Nice one, ${referrer.name}</h1>
-          <p>Someone you invited just confirmed their signup, so you earned a
-          bonus ticket in this week's draw: <strong>№ ${ticketLabel}</strong>
-          (${ticket.week}).</p>
+          ${copy.intro(person.name, label, ticket.week)}
           <p style="margin: 24px 0;">
             <a href="${revealUrl}"
                style="background: #171717; color: #fafafa; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
               See all my tickets
             </a>
           </p>
-          <p style="color: #6b7280; font-size: 13px;">Every friend who joins and
-          confirms earns you another ticket. A match wins a $100 gift card for
-          officially licensed school gear.</p>
+          <p style="color: #6b7280; font-size: 13px;">${copy.footer}</p>
         </div>
       `,
     }),
-    won && process.env.TEST_EMAIL_TO
+    ticket.won && process.env.TEST_EMAIL_TO
       ? resend.emails.send({
           from,
           to: process.env.TEST_EMAIL_TO,
-          subject: `Lotto winner (bonus ticket): ${referrer.email} (ticket ${ticketLabel}, ${ticket.week})`,
+          subject: `Lotto winner (${copy.winnerNote}): ${person.email} (ticket ${label}, ${ticket.week})`,
           html: `
             <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto;">
-              <p><strong>${referrer.name}</strong> (${referrer.email}) just won
-              the weekly draw with referral bonus ticket
-              <strong>№ ${ticketLabel}</strong> in ${ticket.week}.</p>
+              <p><strong>${person.name}</strong> (${person.email}) just won the
+              weekly draw with a ${copy.winnerNote}
+              <strong>№ ${label}</strong> in ${ticket.week}.</p>
               <p>They're owed a $100 gift card toward officially licensed
               school gear (e.g. woodngrail.com).</p>
             </div>
@@ -120,9 +179,8 @@ export async function grantReferralBonus(
       : Promise.resolve(null),
   ]);
   for (const r of sends) {
-    if (r.status === "rejected")
-      console.error("referral email failed:", r.reason);
+    if (r.status === "rejected") console.error("bonus email failed:", r.reason);
     else if (r.value && "error" in r.value && r.value.error)
-      console.error("referral email failed:", r.value.error);
+      console.error("bonus email failed:", r.value.error);
   }
 }

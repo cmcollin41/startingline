@@ -110,11 +110,11 @@ export function WaitlistForm({
                 : `You're already in — ticket № ${formatTicket(result.ticket)} is your entry`}
             </p>
             <p className="text-muted-foreground text-sm">
-              {result.addedSchools > 0 &&
-                `We added ${result.addedSchools} new school ${result.addedSchools === 1 ? "digest" : "digests"} to your lists. `}
-              {result.resent
-                ? "We re-sent your confirmation link — click it to reveal your result."
-                : "Your result lives behind the confirmation link we emailed you. We'll email you the moment we open."}
+              {result.bonusTicket
+                ? "New school digest added — and it earned you a fresh bonus ticket. Check your email to reveal it."
+                : result.resent
+                  ? "We re-sent your confirmation link — click it to reveal your result."
+                  : "Your result lives behind the confirmation link we emailed you. We'll email you the moment we open."}
             </p>
           </CardContent>
         </Card>

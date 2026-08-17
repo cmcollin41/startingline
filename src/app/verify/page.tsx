@@ -160,9 +160,10 @@ export default async function VerifyPage({
             </CardTitle>
             <CardDescription>
               Every friend who joins with your link and confirms their email
-              earns you another ticket in that week&apos;s draw.
+              earns you another ticket in that week&apos;s draw — so does
+              opting into another school.
               {bonuses.length > 0 &&
-                ` You've earned ${bonuses.length} so far.`}
+                ` You've earned ${bonuses.length} bonus ticket${bonuses.length === 1 ? "" : "s"} so far.`}
             </CardDescription>
           </CardHeader>
           <CardContent>

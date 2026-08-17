@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSchoolTheme, type SchoolTheme } from "@/lib/sportsmarks";
-import { REF_CODE_RE, siteOrigin } from "@/lib/referrals";
+import { REF_CODE_RE, grantSchoolBonus, siteOrigin } from "@/lib/referrals";
 import { issueTicket, signupToken, verifyTicket, winningNumber } from "@/lib/lotto";
 
 const signupSchema = z.object({
@@ -31,7 +31,13 @@ export async function fetchSchoolTheme(
 // address can't learn the result or claim a win.
 export type JoinResult =
   | { status: "success"; ticket: number; emailed: boolean }
-  | { status: "duplicate"; ticket: number | null; resent: boolean; addedSchools: number }
+  | {
+      status: "duplicate";
+      ticket: number | null;
+      resent: boolean;
+      addedSchools: number;
+      bonusTicket: boolean;
+    }
   | { status: "error"; message: string };
 
 export async function joinWaitlist(
@@ -123,9 +129,18 @@ export async function joinWaitlist(
         .maybeSingle();
       let resent = false;
       let addedSchools = 0;
+      let bonusTicket = false;
       if (data) {
         addedSchools = await subscribeToSchools(data.id, schools);
-        if (!data.verified_at) {
+        if (addedSchools > 0) {
+          // Opting into a new school deals a fresh bonus ticket; the email it
+          // sends links to /verify, which also confirms unverified addresses.
+          await grantSchoolBonus(data.id, {
+            slug: schools[0].slug,
+            name: schools[0].name,
+          });
+          bonusTicket = true;
+        } else if (!data.verified_at) {
           resent = await sendConfirmEmail(
             data.name,
             email.toLowerCase(),
@@ -140,6 +155,7 @@ export async function joinWaitlist(
         ticket: data?.ticket_number ?? null,
         resent,
         addedSchools,
+        bonusTicket,
       };
     }
     console.error("joinWaitlist insert failed:", error);
