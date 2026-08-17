@@ -43,6 +43,7 @@ export type EditedDigest = z.infer<typeof EditedDigestSchema>;
 
 export async function editDigest(
   schoolName: string,
+  masthead: string,
   week: string,
   headlines: Headline[],
   previouslyCovered: string[]
@@ -73,7 +74,7 @@ export async function editDigest(
         { type: "web_search_20260209", name: "web_search", max_uses: 3 },
         { type: "web_fetch_20260209", name: "web_fetch", max_uses: 6 },
       ],
-      system: `You are the editor of "The ${schoolName} Weekly", an email digest covering all things ${schoolName} — sports, campus, research, culture, everything. Your readers are fans and community members who opted in.
+      system: `You are the editor of "${masthead}", an unofficial email digest covering all things ${schoolName} — sports, campus, research, culture, everything. Your readers are fans and community members who opted in. Refer to the publication only by its masthead name, never as an official school publication.
 
 You are given raw Google News items from the past week and the titles of stories covered in previous editions. Produce this week's edition (${week}):
 

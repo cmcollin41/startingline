@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { currentWeek, signupToken } from "@/lib/lotto";
 import { editDigest, type EditedDigest } from "@/lib/digest-editor";
+import { getMasthead } from "@/lib/masthead";
 import { getSchoolTheme, type SchoolTheme } from "@/lib/sportsmarks";
 
 export type Headline = { title: string; link: string; source: string | null };
@@ -151,6 +152,7 @@ export async function sendWeeklyDigest(
 
     const theme = await getSchoolTheme(slug);
     const headlines = await fetchHeadlines(name);
+    const masthead = await getMasthead(slug, name);
 
     // Everything covered in the past four weeks — the editor won't repeat it.
     const { data: prior } = await supabaseAdmin()
@@ -165,7 +167,13 @@ export async function sendWeeklyDigest(
       .limit(40);
     const previouslyCovered = (prior ?? []).map((p) => p.title);
 
-    const edited = await editDigest(name, week, headlines, previouslyCovered);
+    const edited = await editDigest(
+      name,
+      masthead,
+      week,
+      headlines,
+      previouslyCovered
+    );
 
     // Record what this edition covered, so future editions don't repeat it —
     // for the fallback path, that's the raw headlines we're about to send.
@@ -200,8 +208,8 @@ export async function sendWeeklyDigest(
     const emails = recipients.map((r) => ({
       from,
       to: r.email,
-      subject: `The ${name} Weekly — ${subjectLead}`,
-      html: digestHtml(slug, name, week, theme, headlines, edited, r, origin),
+      subject: `${masthead} — ${subjectLead}`,
+      html: digestHtml(slug, name, masthead, week, theme, headlines, edited, r, origin),
     }));
 
     // Resend batch accepts up to 100 emails per call.
@@ -244,6 +252,7 @@ export async function sendWeeklyDigest(
 function digestHtml(
   schoolSlug: string,
   schoolName: string,
+  masthead: string,
   week: string,
   theme: SchoolTheme | null,
   headlines: Headline[],
@@ -294,8 +303,8 @@ function digestHtml(
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
           <td>
             <div style="font-size: 11px; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8;">startingline presents</div>
-            <div style="font-size: 22px; font-weight: 700; margin-top: 2px;">The ${escapeHtml(schoolName)} Weekly</div>
-            <div style="font-size: 12px; opacity: 0.8; margin-top: 2px;">${week} · all things ${escapeHtml(schoolName)}</div>
+            <div style="font-size: 22px; font-weight: 700; margin-top: 2px;">${escapeHtml(masthead)}</div>
+            <div style="font-size: 12px; opacity: 0.8; margin-top: 2px;">${week} · your weekly digest of all things ${escapeHtml(schoolName)}</div>
           </td>
           <td align="right" width="52">${logo}</td>
         </tr></table>

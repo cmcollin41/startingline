@@ -67,6 +67,14 @@ export default async function AdminPage() {
     .limit(10);
   const digestSends = digestSendData ?? [];
 
+  const { data: mastheadData } = await supabaseAdmin()
+    .from("digest_names")
+    .select("school_name, digest_name")
+    .order("school_name");
+  const mastheads = new Map(
+    (mastheadData ?? []).map((m) => [m.school_name, m.digest_name])
+  );
+
   const { data: subs } = await supabaseAdmin()
     .from("school_subscriptions")
     .select("signup_id, school_name")
@@ -140,6 +148,11 @@ export default async function AdminPage() {
                 .map(([school, count]) => (
                   <Badge key={school} variant="secondary">
                     {school} · {count}
+                    {mastheads.has(school) && (
+                      <span className="text-muted-foreground font-normal">
+                        — “{mastheads.get(school)}”
+                      </span>
+                    )}
                   </Badge>
                 ))}
             </div>
