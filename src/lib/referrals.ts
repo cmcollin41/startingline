@@ -31,7 +31,16 @@ export async function ensureRefCode(
   return data?.ref_code ?? code;
 }
 
+// Canonical origin for links that leave the app — emails especially, where a
+// localhost or preview host must never reach an inbox. SITE_URL wins, then
+// Vercel's production domain; the request's own host is a dev-only fallback.
 export async function siteOrigin() {
+  const canonical =
+    process.env.SITE_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null);
+  if (canonical) return canonical.replace(/\/$/, "");
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? "http";

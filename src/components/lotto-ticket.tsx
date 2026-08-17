@@ -42,15 +42,27 @@ export function LottoTicket({
   week,
   stamp,
   theme,
+  torn = false,
   className,
 }: {
   number: number;
   week: string;
   stamp?: Stamp;
   theme?: TicketTheme | null;
+  // A used ticket: the stub has been torn off and dropped in the pot, so
+  // only the main panel remains, with a perforated tear down its right edge.
+  torn?: boolean;
   className?: string;
 }) {
   const t = theme ?? DEFAULT_THEME;
+  // Scalloped bite marks down the right edge where the stub tore away.
+  const tornEdgeMask: CSSProperties = {
+    maskImage:
+      "radial-gradient(circle 5px at 100% 8px, transparent 98%, black), linear-gradient(black, black)",
+    maskSize: "12px 16px, calc(100% - 12px) 100%",
+    maskPosition: "100% 0, 0 0",
+    maskRepeat: "repeat-y, no-repeat",
+  };
   return (
     <div
       className={cn(
@@ -67,7 +79,13 @@ export function LottoTicket({
     >
       {/* @container so the ticket sizes off its own width, not the viewport —
           it has to survive a narrow phone and a two-up grid column alike */}
-      <div className="@container relative flex w-full max-w-md overflow-hidden rounded-lg bg-[var(--tk-paper)] text-[var(--tk-ink)] select-none">
+      <div
+        className={cn(
+          "@container relative flex w-full max-w-md overflow-hidden bg-[var(--tk-paper)] text-[var(--tk-ink)] select-none",
+          torn ? "rounded-l-lg" : "rounded-lg"
+        )}
+        style={torn ? tornEdgeMask : undefined}
+      >
         {/* hairline rules, like a ticket printed from a roll */}
         <div
           aria-hidden
@@ -131,25 +149,39 @@ export function LottoTicket({
           <p className="mt-3 text-[11px] leading-snug opacity-70">
             Match the weekly number to win a $100 Woodn Grail gift card. One
             ticket per email · draw resets every Monday.
+            {torn && (
+              <>
+                {" · "}
+                <span className="font-mono whitespace-nowrap">{week}</span>
+              </>
+            )}
           </p>
         </div>
 
-        {/* perforation with tear notches */}
-        <div className="relative border-l-2 border-dashed border-[var(--tk-ink)]/30">
-          <div className="bg-background absolute -top-2.5 -left-2 size-4 rounded-full" />
-          <div className="bg-background absolute -bottom-2.5 -left-2 size-4 rounded-full" />
-        </div>
+        {!torn && (
+          <>
+            {/* perforation with tear notches */}
+            <div className="relative border-l-2 border-dashed border-[var(--tk-ink)]/30">
+              <div className="bg-background absolute -top-2.5 -left-2 size-4 rounded-full" />
+              <div className="bg-background absolute -bottom-2.5 -left-2 size-4 rounded-full" />
+            </div>
 
-        {/* stub */}
-        <div className="relative flex w-18 shrink-0 flex-col items-center justify-between bg-[var(--tk-paper-alt)] px-2 py-4 text-center @xs:w-20 @sm:w-24">
-          <span className="font-ticket text-[10px] font-semibold tracking-[0.3em] uppercase [writing-mode:vertical-rl] opacity-70">
-            Weekly draw
-          </span>
-          <span className="font-ticket text-2xl font-bold">$100</span>
-          <span className="font-mono text-[10px] tracking-wider whitespace-nowrap opacity-70 @sm:tracking-widest">
-            {week}
-          </span>
-        </div>
+            {/* stub — carries the number too, so it can be torn off and
+                dropped in the pot like a real raffle ticket */}
+            <div className="relative flex w-18 shrink-0 flex-col items-center justify-between bg-[var(--tk-paper-alt)] px-2 py-4 text-center @xs:w-20 @sm:w-24">
+              <span className="font-ticket text-[10px] font-semibold tracking-[0.3em] uppercase [writing-mode:vertical-rl] opacity-70">
+                Weekly draw
+              </span>
+              <span className="font-mono text-lg font-bold tracking-[0.08em] tabular-nums">
+                № {formatTicket(number)}
+              </span>
+              <span className="font-ticket text-2xl font-bold">$100</span>
+              <span className="font-mono text-[10px] tracking-wider whitespace-nowrap opacity-70 @sm:tracking-widest">
+                {week}
+              </span>
+            </div>
+          </>
+        )}
 
         {stamp && (
           <div className="absolute inset-0 grid place-items-center">

@@ -292,6 +292,7 @@ export default async function AccountPage() {
                 week={t.week}
                 stamp={t.winner ? "winner" : "nomatch"}
                 theme={t.themeSlug ? themes.get(t.themeSlug) : null}
+                torn
                 className="w-full"
               />
               <figcaption className="text-muted-foreground text-center text-xs">

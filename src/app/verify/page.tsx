@@ -114,6 +114,7 @@ export default async function VerifyPage({
             week={b.ticket_week}
             stamp={b.is_winner ? "winner" : "nomatch"}
             theme={theme}
+            torn
             className="w-full"
           />
         ))}
@@ -123,6 +124,7 @@ export default async function VerifyPage({
           week={signup.ticket_week ?? ""}
           stamp={signup.is_winner ? "winner" : "nomatch"}
           theme={theme}
+          torn
           className="w-full"
         />
 

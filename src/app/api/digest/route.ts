@@ -1,4 +1,5 @@
 import { sendWeeklyDigest } from "@/lib/digest";
+import { siteOrigin } from "@/lib/referrals";
 
 // The editorial research pass takes minutes — use the full function window.
 export const maxDuration = 300;
@@ -11,9 +12,6 @@ export async function GET(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const host =
-    req.headers.get("x-forwarded-host") ?? new URL(req.url).host;
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const result = await sendWeeklyDigest(`${proto}://${host}`);
+  const result = await sendWeeklyDigest(await siteOrigin());
   return Response.json(result);
 }

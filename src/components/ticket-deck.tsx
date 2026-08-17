@@ -47,7 +47,7 @@ export function TicketDeck({ tickets }: { tickets: DeckTicket[] }) {
           className="pointer-events-none absolute inset-x-0 top-0 origin-top scale-[0.88] opacity-40 transition-all duration-300"
           style={{ transform: "translateY(44px) scale(0.88)" }}
         >
-          <LottoTicket number={peek2.number} week={peek2.week} theme={peek2.theme} />
+          <LottoTicket number={peek2.number} week={peek2.week} theme={peek2.theme} torn />
         </div>
       )}
       {peek1 && (
@@ -56,7 +56,7 @@ export function TicketDeck({ tickets }: { tickets: DeckTicket[] }) {
           className="pointer-events-none absolute inset-x-0 top-0 origin-top opacity-70 transition-all duration-300"
           style={{ transform: "translateY(24px) scale(0.94)" }}
         >
-          <LottoTicket number={peek1.number} week={peek1.week} theme={peek1.theme} />
+          <LottoTicket number={peek1.number} week={peek1.week} theme={peek1.theme} torn />
         </div>
       )}
 
@@ -69,6 +69,7 @@ export function TicketDeck({ tickets }: { tickets: DeckTicket[] }) {
                 week={t.week}
                 stamp={t.winner ? "winner" : "nomatch"}
                 theme={t.theme}
+                torn
                 className="w-full"
               />
             </CarouselItem>

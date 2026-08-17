@@ -55,6 +55,7 @@ export function WaitlistForm({
           number={result.ticket}
           week={ticket.week}
           theme={theme}
+          torn
           className="w-full"
         />
         <Card className="w-full">
@@ -98,6 +99,7 @@ export function WaitlistForm({
             number={result.ticket}
             week={ticket.week}
             theme={theme}
+            torn
             className="w-full"
           />
         )}
