@@ -314,9 +314,12 @@ export default async function AdminPage() {
                         )}
                       </TableCell>
                       <TableCell>{signup.email}</TableCell>
-                      <TableCell className="max-w-48">
+                      {/* long school lists wrap inside the column instead of
+                          running under the ticket cell (cells default to
+                          whitespace-nowrap) */}
+                      <TableCell className="max-w-48 min-w-36 whitespace-normal">
                         {schoolsBySignup.has(signup.id) ? (
-                          <span className="text-muted-foreground text-xs">
+                          <span className="text-muted-foreground text-xs leading-snug">
                             {schoolsBySignup.get(signup.id)!.join(", ")}
                           </span>
                         ) : (
