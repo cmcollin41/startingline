@@ -44,7 +44,9 @@ export default async function AccountPage() {
     )
     .eq("id", userId)
     .maybeSingle();
-  if (!signup) redirect("/signin");
+  // Session cookie outlived the signup row (account deleted) — clear it via
+  // the logout route, since a render can't mutate cookies itself.
+  if (!signup) redirect("/api/logout");
 
   const [{ data: subsData }, { data: bonusData }, { data: inviteeData }, schools] =
     await Promise.all([

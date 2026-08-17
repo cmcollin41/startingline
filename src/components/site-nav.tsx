@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Ticket } from "lucide-react";
-import { currentUserId } from "@/lib/user-auth";
+import { currentSignupId } from "@/lib/user-auth";
 import { Button } from "@/components/ui/button";
 
 // Session-aware site header, rendered on every page.
 export async function SiteNav() {
-  const userId = await currentUserId();
+  const userId = await currentSignupId();
   return (
     <header className="border-b">
       <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4">

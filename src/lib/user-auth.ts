@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import { supabaseAdmin } from "@/lib/supabase";
 
 // User sessions ride the same passwordless trust chain as everything else:
 // a session is only ever created by /api/login, which requires a signed
@@ -46,6 +47,19 @@ export async function currentUserId(): Promise<string | null> {
   return expected.length === given.length && timingSafeEqual(expected, given)
     ? id
     : null;
+}
+
+// A signed cookie can outlive its signup row (e.g. the account was deleted),
+// so anything that branches on "signed in" must confirm the row still exists.
+export async function currentSignupId(): Promise<string | null> {
+  const id = await currentUserId();
+  if (!id) return null;
+  const { data } = await supabaseAdmin()
+    .from("signups")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  return data ? id : null;
 }
 
 export async function destroyUserSession() {
