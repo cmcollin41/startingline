@@ -3,6 +3,7 @@ import { currentWeek, winningNumber } from "@/lib/lotto";
 import { formatTicket } from "@/components/lotto-ticket";
 import { supabaseAdmin, type Signup } from "@/lib/supabase";
 import { AdminLoginForm } from "@/components/admin-login-form";
+import { SendDigestButton } from "@/components/send-digest-button";
 import { SendTestEmailButton } from "@/components/send-test-email-button";
 import { LogoutButton } from "@/components/logout-button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +60,13 @@ export default async function AdminPage() {
     (s) => s.is_winner || (bonusBySignup.get(s.id)?.wins ?? 0) > 0
   ).length;
 
+  const { data: digestSendData } = await supabaseAdmin()
+    .from("digest_sends")
+    .select("id, school_name, week, recipient_count, created_at")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  const digestSends = digestSendData ?? [];
+
   const { data: subs } = await supabaseAdmin()
     .from("school_subscriptions")
     .select("signup_id, school_name")
@@ -85,6 +93,7 @@ export default async function AdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SendDigestButton />
           <SendTestEmailButton />
           <LogoutButton />
         </div>
@@ -119,16 +128,37 @@ export default async function AdminPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Digest lists</CardTitle>
-            <CardDescription>Subscribers per school</CardDescription>
+            <CardDescription>
+              Subscribers per school. Digests go out automatically every
+              Monday at 14:00 UTC to confirmed subscribers.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-1.5">
-            {[...listCounts.entries()]
-              .sort((a, b) => b[1] - a[1])
-              .map(([school, count]) => (
-                <Badge key={school} variant="secondary">
-                  {school} · {count}
-                </Badge>
-              ))}
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-wrap gap-1.5">
+              {[...listCounts.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([school, count]) => (
+                  <Badge key={school} variant="secondary">
+                    {school} · {count}
+                  </Badge>
+                ))}
+            </div>
+            {digestSends.length > 0 && (
+              <div className="text-muted-foreground flex flex-col gap-1 text-xs">
+                {digestSends.map((d) => (
+                  <span key={d.id}>
+                    {d.week} · {d.school_name} → {d.recipient_count}{" "}
+                    recipient{d.recipient_count === 1 ? "" : "s"} (
+                    {new Date(d.created_at).toLocaleString("en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                      timeZone: "UTC",
+                    })}{" "}
+                    UTC)
+                  </span>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

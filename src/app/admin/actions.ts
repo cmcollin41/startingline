@@ -8,6 +8,8 @@ import {
   isAdmin,
   verifyPassword,
 } from "@/lib/admin-auth";
+import { sendWeeklyDigest, type DigestRunResult } from "@/lib/digest";
+import { siteOrigin } from "@/lib/referrals";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export type LoginResult = { status: "error"; message: string } | null;
@@ -28,6 +30,21 @@ export async function login(
 export async function logout() {
   await destroySession();
   revalidatePath("/admin");
+}
+
+export type DigestNowResult =
+  | { status: "success"; result: DigestRunResult }
+  | { status: "error"; message: string };
+
+// Manual trigger for this week's digest run. Idempotent — schools already
+// sent this week are skipped, so clicking twice can't double-send.
+export async function sendDigestNow(): Promise<DigestNowResult> {
+  if (!(await isAdmin())) {
+    return { status: "error", message: "Not authorized" };
+  }
+  const result = await sendWeeklyDigest(await siteOrigin());
+  revalidatePath("/admin");
+  return { status: "success", result };
 }
 
 export type SendEmailResult =

@@ -45,5 +45,18 @@ create table if not exists public.school_subscriptions (
 -- The app only talks to Supabase from the server with the service role key,
 -- so lock the tables down for anon/authenticated clients entirely.
 alter table public.signups enable row level security;
+-- One row per (school, week) digest send — the unique pair is the idempotency
+-- lock against double-sending.
+create table if not exists public.digest_sends (
+  id uuid primary key default gen_random_uuid(),
+  school_slug text not null,
+  school_name text not null,
+  week text not null,
+  recipient_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  unique (school_slug, week)
+);
+
 alter table public.school_subscriptions enable row level security;
 alter table public.bonus_tickets enable row level security;
+alter table public.digest_sends enable row level security;

@@ -71,6 +71,8 @@ export type SchoolTheme = {
   paperAlt: string; // stub shade
   ink: string; // text/barcode, chosen for contrast against paper
   logoUrl: string | null;
+  // PNG variant for emails — Gmail and friends block SVG and data: images.
+  pngLogoUrl: string | null;
 };
 
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
@@ -126,9 +128,19 @@ export async function getSchoolTheme(
   }>(`/institutions/${slug}/logos`);
   const logos = logoData?.logos ?? [];
   const logo = logos.find((l) => l.is_primary) ?? logos[0];
-  const logoUrl = await resolveLogoUrl(logo?.files ?? []);
+  const files = logo?.files ?? [];
+  const logoUrl = await resolveLogoUrl(files);
+  const pngLogoUrl = files.find((f) => f.file_type === "png")?.url ?? null;
 
-  return { slug, name: colorData.institution.name, paper, paperAlt, ink, logoUrl };
+  return {
+    slug,
+    name: colorData.institution.name,
+    paper,
+    paperAlt,
+    ink,
+    logoUrl,
+    pngLogoUrl,
+  };
 }
 
 // SVG logos from the catalog sometimes ship without a viewBox, which makes
