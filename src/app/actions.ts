@@ -12,9 +12,11 @@ const signupSchema = z.object({
   email: z.email("Please enter a valid email address").max(254),
 });
 
+// One school per opt-in — returning visitors opt into additional schools by
+// signing up again with the same email.
 const schoolsSchema = z
   .array(z.string().regex(/^[a-z0-9-]{1,80}$/))
-  .max(10);
+  .max(1);
 
 // Called from the client when a school is picked, so the ticket can dress in
 // the school's colors before submitting. Public brand data only.
@@ -203,11 +205,11 @@ async function sendConfirmEmail(
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
   const ticketLabel = ticket === null ? "—" : String(ticket).padStart(3, "0");
   const confirmUrl = `${await siteOrigin()}/verify?token=${signupToken(id)}`;
-  const lists =
-    schoolNames.length > 0
-      ? `<p>You're signed up for the weekly digest${schoolNames.length === 1 ? "" : "s"}:
-         <strong>${schoolNames.join("</strong>, <strong>")}</strong>.</p>`
-      : "";
+  const school = schoolNames[0];
+  const lists = school
+    ? `<p>You're opting into the <strong>${school}</strong> weekly digest —
+       not just sports, all things ${school}.</p>`
+    : "";
 
   const { error } = await new Resend(apiKey).emails.send({
     from,
@@ -219,7 +221,8 @@ async function sendConfirmEmail(
         ${lists}
         <p>Ticket <strong>№ ${ticketLabel}</strong> is locked in. Confirm this
         email address to see whether it matched this week's winning number —
-        a match is <strong>$100 off</strong> when the startingline store opens.</p>
+        a match wins a <strong>$100 gift card</strong> toward officially
+        licensed ${school ?? "school"} gear from brands like woodngrail.com.</p>
         <p style="margin: 24px 0;">
           <a href="${confirmUrl}"
              style="background: #171717; color: #fafafa; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;">
@@ -264,7 +267,8 @@ async function notifyOwnerOfWin(
         <p><strong>${name}</strong> (${email}) just won the weekly draw with
         ticket <strong>№ ${ticketLabel}</strong> in ${week}.</p>
         <p>The win counts once they confirm their email — check the admin
-        dashboard for their status. They're owed $100 off at opening.</p>
+        dashboard for their status. They're owed a $100 gift card toward
+        officially licensed school gear (e.g. woodngrail.com).</p>
       </div>
     `,
   });

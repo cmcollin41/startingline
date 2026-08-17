@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Loader2, MailCheck, MailWarning, Ticket, X } from "lucide-react";
+import { Loader2, MailCheck, MailWarning, Ticket } from "lucide-react";
 import {
   fetchSchoolTheme,
   joinWaitlist,
@@ -9,7 +9,6 @@ import {
 } from "@/app/actions";
 import type { School, SchoolTheme } from "@/lib/sportsmarks";
 import { LottoTicket, formatTicket } from "@/components/lotto-ticket";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,21 +34,15 @@ export function WaitlistForm({
     JoinResult | null,
     FormData
   >(joinWaitlist, null);
-  const [selected, setSelected] = useState<SchoolTheme[]>([]);
+  const [selected, setSelected] = useState<SchoolTheme | null>(null);
   const [loadingTheme, startTheme] = useTransition();
+  const theme = selected;
 
-  // The first school picked wears the ticket.
-  const theme = selected[0] ?? null;
-
-  function addSchool(slug: string) {
-    if (!slug || selected.some((s) => s.slug === slug)) return;
+  function pickSchool(slug: string) {
+    if (!slug || selected?.slug === slug) return;
     startTheme(async () => {
       const t = await fetchSchoolTheme(slug);
-      if (t) {
-        setSelected((prev) =>
-          prev.some((s) => s.slug === t.slug) ? prev : [...prev, t]
-        );
-      }
+      if (t) setSelected(t);
     });
   }
 
@@ -73,8 +66,8 @@ export function WaitlistForm({
                 <p className="text-muted-foreground text-sm">
                   We emailed you a confirmation link for ticket №{" "}
                   {formatTicket(result.ticket)}. Click it to see whether you
-                  matched this week&apos;s number. Don&apos;t see it? Check
-                  spam.
+                  matched this week&apos;s number. Want another school&apos;s
+                  digest? Come back and opt in again anytime.
                 </p>
               </>
             ) : (
@@ -140,9 +133,11 @@ export function WaitlistForm({
         <CardHeader>
           <CardTitle>Pick your school, check your ticket</CardTitle>
           <CardDescription>
-            Choose the digests you want, then join to see if №{" "}
-            {formatTicket(ticket.number)} matches this week&apos;s winning
-            number.
+            {selected
+              ? `You're opting into the ${selected.name} weekly digest — not just sports, all things ${selected.name}.`
+              : "You're opting into your school's weekly digest — not just sports, everything about your school."}{" "}
+            Join to see if № {formatTicket(ticket.number)} matches this
+            week&apos;s winning number.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -153,35 +148,31 @@ export function WaitlistForm({
             <input
               type="hidden"
               name="schools"
-              value={JSON.stringify(selected.map((s) => s.slug))}
+              value={JSON.stringify(selected ? [selected.slug] : [])}
             />
             <div className="flex flex-col gap-2">
               <Label htmlFor="school">
                 School{" "}
                 <span className="text-muted-foreground font-normal">
-                  — add as many as you like
+                  — one per signup, come back to add another
                 </span>
               </Label>
               <div className="flex items-center gap-2">
                 <select
                   id="school"
-                  value=""
-                  onChange={(e) => addSchool(e.target.value)}
-                  required={selected.length === 0}
+                  value={selected?.slug ?? ""}
+                  onChange={(e) => pickSchool(e.target.value)}
+                  required
                   disabled={pending}
                   className="border-input bg-transparent focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full min-w-0 rounded-md border px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="" disabled>
                     {schools.length === 0
                       ? "School list unavailable right now"
-                      : "Select a school…"}
+                      : "Select your school…"}
                   </option>
                   {schools.map((s) => (
-                    <option
-                      key={s.slug}
-                      value={s.slug}
-                      disabled={selected.some((sel) => sel.slug === s.slug)}
-                    >
+                    <option key={s.slug} value={s.slug}>
                       {s.name}
                       {s.conference ? ` (${s.conference})` : ""}
                     </option>
@@ -191,31 +182,6 @@ export function WaitlistForm({
                   <Loader2 className="text-muted-foreground size-4 shrink-0 animate-spin" />
                 )}
               </div>
-              {selected.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {selected.map((s) => (
-                    <Badge
-                      key={s.slug}
-                      variant="secondary"
-                      className="gap-1 pr-1"
-                    >
-                      {s.name}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${s.name}`}
-                        onClick={() =>
-                          setSelected((prev) =>
-                            prev.filter((p) => p.slug !== s.slug)
-                          )
-                        }
-                        className="hover:bg-foreground/10 rounded-full p-0.5"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Name</Label>
@@ -250,8 +216,9 @@ export function WaitlistForm({
               {pending ? "Sending…" : "Join and email my result"}
             </Button>
             <p className="text-muted-foreground text-center text-xs">
-              Results go out by email only — one ticket per email, winner gets
-              $100 off when the store opens.
+              Results go out by email only. The weekly winner gets a $100 gift
+              card toward officially licensed school gear from brands like
+              woodngrail.com.
             </p>
           </form>
         </CardContent>

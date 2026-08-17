@@ -86,11 +86,12 @@ export default async function VerifyPage({
                 <PartyPopper className="size-10 text-[#C13527]" />
                 <p className="text-lg font-medium">
                   Ticket № {formatTicket(signup.ticket_number)} is a match —
-                  $100 off is yours
+                  a $100 gift card is yours
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  Your win is confirmed to this email address. We&apos;ll send
-                  redemption details with the opening announcement.
+                  Good for officially licensed school gear from brands like
+                  woodngrail.com. Your win is confirmed to this email address —
+                  redemption details are on the way.
                 </p>
               </>
             ) : (
