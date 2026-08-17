@@ -91,6 +91,18 @@ export default async function VerifyPage({
   const wonAny = signup.is_winner || bonuses.some((b) => b.is_winner);
   const shareUrl = `${await siteOrigin()}/?ref=${await ensureRefCode(signup.id, signup.ref_code)}`;
 
+  // Who came in through this signup's link — first names only.
+  const { data: inviteeData } = await supabaseAdmin()
+    .from("signups")
+    .select("id, name, verified_at")
+    .eq("referred_by", signup.id)
+    .order("created_at");
+  const invitees = (inviteeData ?? []).map((i) => ({
+    id: i.id,
+    firstName: i.name.trim().split(/\s+/)[0],
+    confirmed: i.verified_at !== null,
+  }));
+
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-8 px-4 py-16">
       <div className="flex flex-col items-center gap-3 text-center">
@@ -166,8 +178,31 @@ export default async function VerifyPage({
                 ` You've earned ${bonuses.length} bonus ticket${bonuses.length === 1 ? "" : "s"} so far.`}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
             <ShareLink url={shareUrl} />
+            {invitees.length > 0 && (
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {invitees.map((i) => (
+                  <li
+                    key={i.id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="font-medium">{i.firstName}</span>
+                    <span
+                      className={
+                        i.confirmed
+                          ? "text-primary text-xs"
+                          : "text-muted-foreground text-xs"
+                      }
+                    >
+                      {i.confirmed
+                        ? "confirmed ✓ — ticket earned"
+                        : "waiting on email confirmation"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
