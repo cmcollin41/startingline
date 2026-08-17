@@ -2,6 +2,7 @@ import "server-only";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { currentWeek, signupToken } from "@/lib/lotto";
+import { editDigest, type EditedDigest } from "@/lib/digest-editor";
 import { getSchoolTheme, type SchoolTheme } from "@/lib/sportsmarks";
 
 export type Headline = { title: string; link: string; source: string | null };
@@ -49,7 +50,8 @@ export async function fetchHeadlines(schoolName: string): Promise<Headline[]> {
       if (title && link.startsWith("http")) {
         items.push({ title, link, source: source || null });
       }
-      if (items.length >= 5) break;
+      // Gather generously — the AI editor dedupes and filters down to 5.
+      if (items.length >= 15) break;
     }
     return items;
   } catch (err) {
@@ -146,11 +148,44 @@ export async function sendWeeklyDigest(
     const theme = await getSchoolTheme(slug);
     const headlines = await fetchHeadlines(name);
 
+    // Everything covered in the past four weeks — the editor won't repeat it.
+    const { data: prior } = await supabaseAdmin()
+      .from("digest_stories")
+      .select("title")
+      .eq("school_slug", slug)
+      .gte(
+        "created_at",
+        new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString()
+      )
+      .order("created_at", { ascending: false })
+      .limit(40);
+    const previouslyCovered = (prior ?? []).map((p) => p.title);
+
+    const edited = await editDigest(name, week, headlines, previouslyCovered);
+
+    // Record what this edition covered, so future editions don't repeat it —
+    // for the fallback path, that's the raw headlines we're about to send.
+    const covered = edited
+      ? edited.stories.map((s) => ({ title: s.headline, url: s.link }))
+      : headlines.slice(0, 5).map((h) => ({ title: h.title, url: h.link }));
+    if (covered.length > 0) {
+      const { error: storiesError } = await supabaseAdmin()
+        .from("digest_stories")
+        .insert(
+          covered.map((c) => ({ school_slug: slug, week, title: c.title, url: c.url }))
+        );
+      if (storiesError) {
+        console.error(`${name}: digest_stories insert failed:`, storiesError);
+      }
+    }
+
+    const subjectLead =
+      edited?.stories[0]?.headline ?? headlines[0]?.title ?? `your ${week} digest`;
     const emails = recipients.map((r) => ({
       from,
       to: r.email,
-      subject: `The ${name} Weekly — ${headlines[0]?.title ?? `your ${week} digest`}`,
-      html: digestHtml(slug, name, week, theme, headlines, r, origin),
+      subject: `The ${name} Weekly — ${subjectLead}`,
+      html: digestHtml(slug, name, week, theme, headlines, edited, r, origin),
     }));
 
     // Resend batch accepts up to 100 emails per call.
@@ -176,6 +211,7 @@ function digestHtml(
   week: string,
   theme: SchoolTheme | null,
   headlines: Headline[],
+  edited: EditedDigest | null,
   recipient: Recipient,
   origin: string
 ) {
@@ -185,17 +221,32 @@ function digestHtml(
     ? `<img src="${theme.pngLogoUrl}" alt="" width="44" height="44"
          style="display: block; max-width: 44px; max-height: 44px; object-fit: contain; background: #ffffff; border-radius: 8px; padding: 4px;" />`
     : "";
-  const stories = headlines.length
-    ? headlines
+  const intro = edited
+    ? `<p style="margin: 0 0 20px; color: #374151; font-size: 15px;">${escapeHtml(edited.intro)}</p>`
+    : "";
+  const stories = edited
+    ? edited.stories
         .map(
-          (h) => `
+          (s) => `
+      <div style="margin: 0 0 18px;">
+        <a href="${s.link}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(s.headline)}</a>
+        <p style="margin: 4px 0 0; color: #4b5563; font-size: 13px;">${escapeHtml(s.summary)}
+        <span style="color: #9ca3af;">· ${escapeHtml(s.source)}</span></p>
+      </div>`
+        )
+        .join("")
+    : headlines.length
+      ? headlines
+          .slice(0, 5)
+          .map(
+            (h) => `
       <p style="margin: 0 0 16px;">
         <a href="${h.link}" style="color: #111827; font-weight: 600; text-decoration: none; font-size: 15px;">${escapeHtml(h.title)}</a>
         ${h.source ? `<br/><span style="color: #6b7280; font-size: 12px;">${escapeHtml(h.source)}</span>` : ""}
       </p>`
-        )
-        .join("")
-    : `<p style="color: #6b7280;">A quiet week for ${escapeHtml(schoolName)} news — we'll be back with more next Monday.</p>`;
+          )
+          .join("")
+      : `<p style="color: #6b7280;">A quiet week for ${escapeHtml(schoolName)} news — we'll be back with more next Monday.</p>`;
   const inviteUrl = recipient.refCode
     ? `${origin}/?ref=${recipient.refCode}`
     : origin;
@@ -214,6 +265,7 @@ function digestHtml(
         </tr></table>
       </div>
       <div style="border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 12px 12px; padding: 24px;">
+        ${intro}
         ${stories}
         <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin-top: 24px;">
           <p style="margin: 0 0 8px; font-weight: 600; font-size: 14px;">This week's draw is live 🎟️</p>

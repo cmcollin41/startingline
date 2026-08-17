@@ -57,6 +57,18 @@ create table if not exists public.digest_sends (
   unique (school_slug, week)
 );
 
+-- Stories each digest edition covered — read back by the AI editor so later
+-- editions don't repeat news.
+create table if not exists public.digest_stories (
+  id uuid primary key default gen_random_uuid(),
+  school_slug text not null,
+  week text not null,
+  title text not null,
+  url text not null,
+  created_at timestamptz not null default now()
+);
+
 alter table public.school_subscriptions enable row level security;
 alter table public.bonus_tickets enable row level security;
 alter table public.digest_sends enable row level security;
+alter table public.digest_stories enable row level security;
