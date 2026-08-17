@@ -1,10 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { headers } from "next/headers";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSchoolTheme, type SchoolTheme } from "@/lib/sportsmarks";
+import { REF_CODE_RE, siteOrigin } from "@/lib/referrals";
 import { issueTicket, signupToken, verifyTicket, winningNumber } from "@/lib/lotto";
 
 const signupSchema = z.object({
@@ -84,6 +84,19 @@ export async function joinWaitlist(
 
   const won = ticket.number === winningNumber(ticket.week);
 
+  // Arrived via a share link? Credit the referrer — the bonus ticket itself
+  // is granted later, when this signup confirms their email.
+  let referredBy: string | null = null;
+  const refCode = String(formData.get("ref") ?? "");
+  if (REF_CODE_RE.test(refCode)) {
+    const { data: referrer } = await supabaseAdmin()
+      .from("signups")
+      .select("id")
+      .eq("ref_code", refCode)
+      .maybeSingle();
+    referredBy = referrer?.id ?? null;
+  }
+
   const { data: inserted, error } = await supabaseAdmin()
     .from("signups")
     .insert({
@@ -93,6 +106,7 @@ export async function joinWaitlist(
       ticket_week: ticket.week,
       is_winner: won,
       win_week: won ? ticket.week : null,
+      referred_by: referredBy,
     })
     .select("id")
     .single();
@@ -178,13 +192,6 @@ async function subscribeToSchools(
     return 0;
   }
   return fresh.length;
-}
-
-async function siteOrigin() {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}`;
 }
 
 // The confirmation email never states the result — clicking the link routes

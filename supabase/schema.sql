@@ -13,7 +13,22 @@ create table if not exists public.signups (
   win_week text,
   -- Set on first click of the emailed confirmation link; a win only counts
   -- once the address is confirmed.
-  verified_at timestamptz
+  verified_at timestamptz,
+  -- Referral loop: this signup's share code, and who invited them.
+  ref_code text unique,
+  referred_by uuid references public.signups (id)
+);
+
+-- Bonus tickets earned by inviting friends: one per invitee who signs up and
+-- confirms their email (referred_signup_id is globally unique).
+create table if not exists public.bonus_tickets (
+  id uuid primary key default gen_random_uuid(),
+  signup_id uuid not null references public.signups (id) on delete cascade,
+  referred_signup_id uuid not null unique references public.signups (id) on delete cascade,
+  ticket_number smallint not null,
+  ticket_week text not null,
+  is_winner boolean not null default false,
+  created_at timestamptz not null default now()
 );
 
 -- A signup can opt into any number of school digest lists (school identity
@@ -31,3 +46,4 @@ create table if not exists public.school_subscriptions (
 -- so lock the tables down for anon/authenticated clients entirely.
 alter table public.signups enable row level security;
 alter table public.school_subscriptions enable row level security;
+alter table public.bonus_tickets enable row level security;

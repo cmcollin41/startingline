@@ -5,7 +5,9 @@ import { listSchools } from "@/lib/sportsmarks";
 // Every page load deals a fresh ticket, so this page renders per-request.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ searchParams }: PageProps<"/">) {
+  const { ref } = await searchParams;
+  const refCode = typeof ref === "string" ? ref : "";
   const ticket = issueTicket();
   const schools = await listSchools();
 
@@ -20,7 +22,7 @@ export default async function Home() {
           match wins a $100 gift card for officially licensed school gear.
         </p>
       </div>
-      <WaitlistForm ticket={ticket} schools={schools} />
+      <WaitlistForm ticket={ticket} schools={schools} refCode={refCode} />
     </main>
   );
 }

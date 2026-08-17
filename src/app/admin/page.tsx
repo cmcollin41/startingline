@@ -44,7 +44,20 @@ export default async function AdminPage() {
 
   const signups = (data ?? []) as Signup[];
   const week = currentWeek();
-  const winners = signups.filter((s) => s.is_winner).length;
+
+  const { data: bonusData } = await supabaseAdmin()
+    .from("bonus_tickets")
+    .select("signup_id, is_winner");
+  const bonusBySignup = new Map<string, { count: number; wins: number }>();
+  for (const b of bonusData ?? []) {
+    const entry = bonusBySignup.get(b.signup_id) ?? { count: 0, wins: 0 };
+    entry.count += 1;
+    if (b.is_winner) entry.wins += 1;
+    bonusBySignup.set(b.signup_id, entry);
+  }
+  const winners = signups.filter(
+    (s) => s.is_winner || (bonusBySignup.get(s.id)?.wins ?? 0) > 0
+  ).length;
 
   const { data: subs } = await supabaseAdmin()
     .from("school_subscriptions")
@@ -177,7 +190,15 @@ export default async function AdminPage() {
                             <span className="text-muted-foreground text-xs">
                               {signup.ticket_week}
                             </span>
-                            {signup.is_winner &&
+                            {(bonusBySignup.get(signup.id)?.count ?? 0) >
+                              0 && (
+                              <span className="text-muted-foreground text-xs">
+                                +{bonusBySignup.get(signup.id)!.count} bonus
+                              </span>
+                            )}
+                            {(signup.is_winner ||
+                              (bonusBySignup.get(signup.id)?.wins ?? 0) >
+                                0) &&
                               (signup.verified_at ? (
                                 <Badge>Winner · $100</Badge>
                               ) : (

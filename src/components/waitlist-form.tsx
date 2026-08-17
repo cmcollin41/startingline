@@ -26,9 +26,11 @@ type IssuedTicket = { number: number; week: string; sig: string };
 export function WaitlistForm({
   ticket,
   schools,
+  refCode = "",
 }: {
   ticket: IssuedTicket;
   schools: School[];
+  refCode?: string;
 }) {
   const [result, formAction, pending] = useActionState<
     JoinResult | null,
@@ -145,6 +147,7 @@ export function WaitlistForm({
             <input type="hidden" name="ticket" value={ticket.number} />
             <input type="hidden" name="week" value={ticket.week} />
             <input type="hidden" name="sig" value={ticket.sig} />
+            <input type="hidden" name="ref" value={refCode} />
             <input
               type="hidden"
               name="schools"
