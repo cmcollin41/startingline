@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { Ticket } from "lucide-react";
-import { currentSignupId } from "@/lib/user-auth";
+import { currentSignup, currentUserId } from "@/lib/user-auth";
 import { Button } from "@/components/ui/button";
 
 // Session-aware site header, rendered on every page.
 export async function SiteNav() {
-  const userId = await currentSignupId();
+  const signup = await currentSignup();
+  // A cookie with no matching signup is a stale session — route the button
+  // through /api/logout so clicking it clears the cookie before sign-in.
+  const stale = !signup && (await currentUserId()) !== null;
+  const firstName = signup?.name.trim().split(/\s+/)[0];
   return (
     <header className="border-b">
       <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4">
@@ -17,13 +21,13 @@ export async function SiteNav() {
           startingline
         </Link>
         <nav className="flex items-center gap-1">
-          {userId ? (
+          {signup ? (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/account">My account</Link>
+              <Link href="/account">Hello, {firstName}</Link>
             </Button>
           ) : (
             <Button asChild variant="ghost" size="sm">
-              <Link href="/signin">Sign in</Link>
+              <Link href={stale ? "/api/logout" : "/signin"}>Log in</Link>
             </Button>
           )}
         </nav>

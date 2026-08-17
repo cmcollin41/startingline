@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentSignupId } from "@/lib/user-auth";
+import { currentSignup } from "@/lib/user-auth";
 import { SignInForm } from "@/components/signin-form";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function SignInPage({
   searchParams,
 }: PageProps<"/signin">) {
-  if (await currentSignupId()) redirect("/account");
+  if (await currentSignup()) redirect("/account");
   const { error } = await searchParams;
 
   return (
