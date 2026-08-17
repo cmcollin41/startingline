@@ -160,7 +160,6 @@ export default async function AdminPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <SendDigestButton />
           <SendTestEmailButton />
           <LogoutButton />
         </div>
@@ -193,12 +192,16 @@ export default async function AdminPage() {
 
       {lists.length > 0 && (
         <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Digest lists</CardTitle>
-            <CardDescription>
-              Subscribers per school. Digests go out automatically every
-              Monday at 14:00 UTC to confirmed subscribers.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div className="flex flex-col gap-1.5">
+              <CardTitle>Digest lists</CardTitle>
+              <CardDescription>
+                Subscribers per school. Digests go out automatically every
+                Monday at 14:00 UTC to confirmed subscribers — schools still
+                missing this week&apos;s edition can be sent from here.
+              </CardDescription>
+            </div>
+            <SendDigestButton />
           </CardHeader>
           <CardContent>
             <Table>
@@ -244,7 +247,7 @@ export default async function AdminPage() {
                       {l.count}
                     </TableCell>
                     <TableCell className="text-right">
-                      {l.lastSend ? (
+                      {l.lastSend?.week === week ? (
                         <span className="text-muted-foreground text-xs">
                           <span className="text-foreground font-medium">
                             {l.lastSend.week}
@@ -257,8 +260,13 @@ export default async function AdminPage() {
                           · {l.lastSend.clickers} clicked
                         </span>
                       ) : (
-                        <span className="text-muted-foreground text-xs">
-                          not sent yet
+                        <span className="flex items-center justify-end gap-3">
+                          <span className="text-muted-foreground text-xs">
+                            {l.lastSend
+                              ? `last sent ${l.lastSend.week}`
+                              : "not sent yet"}
+                          </span>
+                          <SendDigestButton slug={l.slug} school={l.name} size="sm" />
                         </span>
                       )}
                     </TableCell>

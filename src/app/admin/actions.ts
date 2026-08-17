@@ -2,29 +2,44 @@
 
 import { revalidatePath } from "next/cache";
 import { Resend } from "resend";
+import { start } from "workflow/api";
 import { isAdminUser } from "@/lib/user-auth";
 import {
+  listPendingSchools,
   resendLatestDigests,
-  sendWeeklyDigest,
-  type DigestRunResult,
   type ResendResult,
 } from "@/lib/digest";
+import { digestRunWorkflow } from "@/workflows/digest";
 import { siteOrigin } from "@/lib/referrals";
 import { supabaseAdmin } from "@/lib/supabase";
 
-export type DigestNowResult =
-  | { status: "success"; result: DigestRunResult }
+export type QueueDigestsResult =
+  | { status: "queued"; schools: string[] }
+  | { status: "none" }
   | { status: "error"; message: string };
 
-// Manual trigger for this week's digest run. Idempotent — schools already
-// sent this week are skipped, so clicking twice can't double-send.
-export async function sendDigestNow(): Promise<DigestNowResult> {
+// Queue this week's digest generation as a background workflow and return
+// immediately — the research/edit/send pass takes minutes per school, far
+// too long to hold a server action open. With no slugs given, every school
+// that still needs this week's edition is queued; pass slugs to target
+// specific schools. Idempotent — the (school, week) lock in sendSchoolDigest
+// means double-queuing can't double-send.
+export async function queueDigests(
+  slugs?: string[]
+): Promise<QueueDigestsResult> {
   if (!(await isAdminUser())) {
     return { status: "error", message: "Not authorized" };
   }
-  const result = await sendWeeklyDigest(await siteOrigin());
-  revalidatePath("/admin");
-  return { status: "success", result };
+  let pending = await listPendingSchools();
+  if (slugs?.length) {
+    pending = pending.filter((p) => slugs.includes(p.slug));
+  }
+  if (pending.length === 0) return { status: "none" };
+  await start(digestRunWorkflow, [
+    pending.map(({ slug, name }) => ({ slug, name })),
+    await siteOrigin(),
+  ]);
+  return { status: "queued", schools: pending.map((p) => p.name) };
 }
 
 export type ResendDigestResult =

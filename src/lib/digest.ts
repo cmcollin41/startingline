@@ -68,188 +68,193 @@ type Recipient = {
   refCode: string | null;
 };
 
-export type DigestRunResult = {
-  week: string;
-  sent: { school: string; recipients: number }[];
-  skipped: string[]; // already sent this week
-  errors: string[];
+export type PendingSchool = {
+  slug: string;
+  name: string;
+  subscribers: number;
 };
 
-// Send this week's digest for every school that has confirmed subscribers.
-// Safe to call repeatedly: each (school, week) sends at most once.
-export async function sendWeeklyDigest(
-  origin: string
-): Promise<DigestRunResult> {
+// Schools with confirmed subscribers that haven't received this week's
+// edition yet — e.g. a school whose first subscriber arrived after Monday's
+// run. These are what a digest run still needs to produce.
+export async function listPendingSchools(): Promise<PendingSchool[]> {
   const week = currentWeek();
-  const result: DigestRunResult = { week, sent: [], skipped: [], errors: [] };
+  const [{ data: subs }, { data: sent }] = await Promise.all([
+    supabaseAdmin()
+      .from("school_subscriptions")
+      .select("school_slug, school_name, signups!inner(verified_at)")
+      .not("signups.verified_at", "is", null),
+    supabaseAdmin().from("digest_sends").select("school_slug").eq("week", week),
+  ]);
+  const already = new Set((sent ?? []).map((s) => s.school_slug));
+  const bySlug = new Map<string, PendingSchool>();
+  for (const row of subs ?? []) {
+    if (already.has(row.school_slug)) continue;
+    const entry = bySlug.get(row.school_slug) ?? {
+      slug: row.school_slug,
+      name: row.school_name,
+      subscribers: 0,
+    };
+    entry.subscribers += 1;
+    bySlug.set(row.school_slug, entry);
+  }
+  return [...bySlug.values()];
+}
+
+export type SchoolSendOutcome = {
+  school: string;
+  week: string;
+  status: "sent" | "skipped" | "error";
+  recipients: number;
+  message?: string;
+};
+
+// Produce and send one school's digest for the current week: research the
+// stories, run the AI editor, email every confirmed subscriber. Safe to call
+// repeatedly — the (school, week) lock means each edition sends at most once.
+export async function sendSchoolDigest(
+  slug: string,
+  name: string,
+  origin: string
+): Promise<SchoolSendOutcome> {
+  const week = currentWeek();
+  const fail = (message: string): SchoolSendOutcome => ({
+    school: name,
+    week,
+    status: "error",
+    recipients: 0,
+    message,
+  });
 
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    result.errors.push("RESEND_API_KEY is not configured");
-    return result;
-  }
+  if (!apiKey) return fail("RESEND_API_KEY is not configured");
   const resend = new Resend(apiKey);
   const from = process.env.RESEND_FROM ?? "startingline <onboarding@resend.dev>";
 
   // Confirmed subscribers only — an unconfirmed address never gets the digest.
   const { data: subs, error } = await supabaseAdmin()
     .from("school_subscriptions")
-    .select(
-      "school_slug, school_name, signups!inner(id, name, email, ref_code, verified_at)"
-    )
+    .select("signups!inner(id, name, email, ref_code, verified_at)")
+    .eq("school_slug", slug)
     .not("signups.verified_at", "is", null);
-  if (error) {
-    result.errors.push(`subscription query failed: ${error.message}`);
-    return result;
-  }
-
-  const bySchool = new Map<
-    string,
-    { name: string; recipients: Recipient[] }
-  >();
-  for (const row of subs ?? []) {
-    const signup = row.signups as unknown as {
+  if (error) return fail(`subscription query failed: ${error.message}`);
+  const recipients: Recipient[] = (subs ?? []).map((row) => {
+    const s = row.signups as unknown as {
       id: string;
       name: string;
       email: string;
       ref_code: string | null;
     };
-    const entry: { name: string; recipients: Recipient[] } = bySchool.get(
-      row.school_slug
-    ) ?? { name: row.school_name, recipients: [] };
-    entry.recipients.push({
-      id: signup.id,
-      name: signup.name,
-      email: signup.email,
-      refCode: signup.ref_code,
-    });
-    bySchool.set(row.school_slug, entry);
+    return { id: s.id, name: s.name, email: s.email, refCode: s.ref_code };
+  });
+  if (recipients.length === 0) {
+    return { school: name, week, status: "skipped", recipients: 0 };
   }
 
-  const processSchool = async (
-    slug: string,
-    name: string,
-    recipients: Recipient[]
-  ) => {
-    // Idempotency lock: claiming the (school, week) row must succeed before
-    // any email goes out. The row's id keys open/click analytics.
-    const { data: lock, error: lockError } = await supabaseAdmin()
-      .from("digest_sends")
-      .insert({
-        school_slug: slug,
-        school_name: name,
-        week,
-        recipient_count: recipients.length,
-      })
-      .select("id")
-      .single();
-    if (lockError || !lock) {
-      if (lockError?.code === "23505") {
-        result.skipped.push(name);
-      } else {
-        result.errors.push(`${name}: lock failed (${lockError?.message})`);
-      }
-      return;
-    }
-    const sendId = lock.id as string;
-
-    const theme = await getSchoolTheme(slug);
-    const headlines = await fetchHeadlines(name);
-    const masthead = await getMasthead(slug, name);
-
-    // Everything covered in the past four weeks — the editor won't repeat it.
-    const { data: prior } = await supabaseAdmin()
-      .from("digest_stories")
-      .select("title")
-      .eq("school_slug", slug)
-      .gte(
-        "created_at",
-        new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString()
-      )
-      .order("created_at", { ascending: false })
-      .limit(40);
-    const previouslyCovered = (prior ?? []).map((p) => p.title);
-
-    const edited = await editDigest(
-      name,
-      masthead,
+  // Idempotency lock: claiming the (school, week) row must succeed before
+  // any email goes out. The row's id keys open/click analytics.
+  const { data: lock, error: lockError } = await supabaseAdmin()
+    .from("digest_sends")
+    .insert({
+      school_slug: slug,
+      school_name: name,
       week,
-      headlines,
-      previouslyCovered
-    );
-
-    // Record what this edition covered, so future editions don't repeat it —
-    // for the fallback path, that's the raw headlines we're about to send.
-    const covered = edited
-      ? edited.stories.map((s) => ({
-          title: s.headline,
-          url: s.link,
-          summary: s.summary,
-        }))
-      : headlines
-          .slice(0, 5)
-          .map((h) => ({ title: h.title, url: h.link, summary: null }));
-    if (covered.length > 0) {
-      const { error: storiesError } = await supabaseAdmin()
-        .from("digest_stories")
-        .insert(
-          covered.map((c) => ({
-            school_slug: slug,
-            week,
-            title: c.title,
-            url: c.url,
-            summary: c.summary,
-          }))
-        );
-      if (storiesError) {
-        console.error(`${name}: digest_stories insert failed:`, storiesError);
-      }
+      recipient_count: recipients.length,
+    })
+    .select("id")
+    .single();
+  if (lockError || !lock) {
+    if (lockError?.code === "23505") {
+      return { school: name, week, status: "skipped", recipients: 0 };
     }
+    return fail(`lock failed (${lockError?.message})`);
+  }
+  const sendId = lock.id as string;
 
-    const subjectLead =
-      edited?.stories[0]?.headline ?? headlines[0]?.title ?? `your ${week} digest`;
-    const emails = recipients.map((r) => ({
-      from,
-      to: r.email,
-      subject: `${masthead} — ${subjectLead}`,
-      html: digestHtml(slug, name, masthead, week, theme, headlines, edited, r, origin, sendId),
-    }));
+  const theme = await getSchoolTheme(slug);
+  const headlines = await fetchHeadlines(name);
+  const masthead = await getMasthead(slug, name);
 
-    // Resend batch accepts up to 100 emails per call.
-    let sent = 0;
-    for (let i = 0; i < emails.length; i += 100) {
-      const chunk = emails.slice(i, i + 100);
-      const { data, error: sendError } = await resend.batch.send(chunk);
-      if (sendError) {
-        result.errors.push(`${name}: batch send failed (${sendError.message})`);
-      } else {
-        sent += data?.data?.length ?? chunk.length;
-      }
-    }
-    result.sent.push({ school: name, recipients: sent });
-  };
+  // Everything covered in the past four weeks — the editor won't repeat it.
+  const { data: prior } = await supabaseAdmin()
+    .from("digest_stories")
+    .select("title")
+    .eq("school_slug", slug)
+    .gte(
+      "created_at",
+      new Date(Date.now() - 28 * 24 * 3600 * 1000).toISOString()
+    )
+    .order("created_at", { ascending: false })
+    .limit(40);
+  const previouslyCovered = (prior ?? []).map((p) => p.title);
 
-  // The editorial research pass is the slow part (minutes per school), so
-  // schools run concurrently, a few at a time.
-  const queue = [...bySchool.entries()];
-  const workers = Array.from(
-    { length: Math.min(4, queue.length) },
-    async () => {
-      for (;;) {
-        const next = queue.shift();
-        if (!next) return;
-        const [slug, { name, recipients }] = next;
-        try {
-          await processSchool(slug, name, recipients);
-        } catch (err) {
-          result.errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    }
+  const edited = await editDigest(
+    name,
+    masthead,
+    week,
+    headlines,
+    previouslyCovered
   );
-  await Promise.all(workers);
 
-  return result;
+  // Record what this edition covered, so future editions don't repeat it —
+  // for the fallback path, that's the raw headlines we're about to send.
+  const covered = edited
+    ? edited.stories.map((s) => ({
+        title: s.headline,
+        url: s.link,
+        summary: s.summary,
+      }))
+    : headlines
+        .slice(0, 5)
+        .map((h) => ({ title: h.title, url: h.link, summary: null }));
+  if (covered.length > 0) {
+    const { error: storiesError } = await supabaseAdmin()
+      .from("digest_stories")
+      .insert(
+        covered.map((c) => ({
+          school_slug: slug,
+          week,
+          title: c.title,
+          url: c.url,
+          summary: c.summary,
+        }))
+      );
+    if (storiesError) {
+      console.error(`${name}: digest_stories insert failed:`, storiesError);
+    }
+  }
+
+  const subjectLead =
+    edited?.stories[0]?.headline ?? headlines[0]?.title ?? `your ${week} digest`;
+  const emails = recipients.map((r) => ({
+    from,
+    to: r.email,
+    subject: `${masthead} — ${subjectLead}`,
+    html: digestHtml(slug, name, masthead, week, theme, headlines, edited, r, origin, sendId),
+  }));
+
+  // Resend batch accepts up to 100 emails per call.
+  let sent = 0;
+  const sendErrors: string[] = [];
+  for (let i = 0; i < emails.length; i += 100) {
+    const chunk = emails.slice(i, i + 100);
+    const { data, error: sendError } = await resend.batch.send(chunk);
+    if (sendError) {
+      sendErrors.push(sendError.message);
+    } else {
+      sent += data?.data?.length ?? chunk.length;
+    }
+  }
+  if (sendErrors.length > 0 && sent === 0) {
+    return fail(`batch send failed (${sendErrors.join("; ")})`);
+  }
+  return {
+    school: name,
+    week,
+    status: "sent",
+    recipients: sent,
+    message: sendErrors.length ? `partial: ${sendErrors.join("; ")}` : undefined,
+  };
 }
 
 function sourceHost(url: string): string {
